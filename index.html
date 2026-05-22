@@ -1057,15 +1057,19 @@ function renderT1(filter='', status='', payment='') {
         <span style="font-weight:600;color:var(--ac);font-family:var(--mn);font-size:12px">${r.invoice_no}</span>
         ${isOverdue?'<span class="bd bd-er" style="margin-left:4px">逾期</span>':''}
       </td>
-      <td class="mono" style="font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.reference||''}">${r.reference||'—'}</td>
+      <td class="ec mono" style="font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" title="${r.reference||''}" onclick="editCell(this,'${r.id}','reference','${(r.reference||'').replace(/'/g,''')}')">${r.reference||'<span style=\"color:var(--t3)\">点击编辑</span>'}</td>
       <td class="mono" style="font-size:12px;color:${isOverdue?'var(--er)':'var(--t2)'}">${r.due_date||'—'}</td>
       <td class="num">${fmt(r.invoice_amount)}</td>
       <td class="num" style="color:var(--ok)">${r.payments>0?fmt(r.payments):'—'}</td>
       <td class="num" style="font-weight:700;color:${r.balance_aud>0?'var(--tx)':'var(--ok)'}">${fmt(r.balance_aud)}</td>
       <td>${catBadge}</td>
       <td class="ec mono" style="font-size:12px;color:var(--ac4)" onclick="editCell(this,'${r.id}','recon_no','${r.recon_no||''}')">${r.recon_no||'<span style="color:var(--t3)">点击设置</span>'}</td>
-      <td>${payBadge}</td>
-      <td>${contractBadge}</td>
+      <td onclick="editInlineSelect(this,'${r.id}','payment_method','${r.payment_method||''}',['直接支付','贷款'])" style="cursor:pointer">
+        ${r.payment_method ? (r.payment_method==='直接支付'?'<span class=\"bd bd-ok\">直接支付</span>':'<span class=\"bd bd-ac\">贷款</span>') : '<span style=\"color:var(--t3);font-size:12px\">点击设置</span>'}
+      </td>
+      <td onclick="editInlineSelect(this,'${r.id}','contract_type','${r.contract_type||''}',['确认合同','自有'])" style="cursor:pointer">
+        ${r.contract_type ? '<span class=\"bd bd-mu\">'+r.contract_type+'</span>' : '<span style=\"color:var(--t3);font-size:12px\">点击设置</span>'}
+      </td>
       <td class="mono" style="font-size:11px">${r.payment_date||'—'}</td>
       <td>
         <button class="btn btn-secondary btn-sm" onclick="openInvoiceDetail('${r.id}')">详情</button>
@@ -1307,24 +1311,51 @@ function renderT4() {
 function editCell(td, id, field, current) {
   const inp = document.createElement('input');
   inp.className = 'cell-input';
-  inp.value = current;
+  inp.value = current||'';
   td.innerHTML='';
   td.appendChild(inp);
   inp.focus();
   inp.onblur = async () => {
     const val = inp.value.trim();
-    td.innerHTML = val||'<span style="color:var(--t3)">点击设置</span>';
-    if(val!==current) {
-      try {
-        await db.update('invoices',{[field]:val||null},`?id=eq.${id}`);
-        const inv = S.invoices.find(r=>r.id===id);
-        if(inv) inv[field]=val||null;
-        toast('已保存','ok');
-        if(field==='recon_no'||field==='payment_method') renderT3();
-      } catch(e) { toast('保存失败','er'); }
-    }
+    if(val===(current||'')) { renderT1(); return; }
+    try {
+      const url = `${SUPA_URL}/rest/v1/invoices?id=eq.${id}`;
+      const res = await fetch(url, {
+        method: 'PATCH',
+        headers: {'Content-Type':'application/json','apikey':SUPA_KEY,'Authorization':`Bearer ${SUPA_KEY}`},
+        body: JSON.stringify({[field]:val||null}),
+      });
+      if(!res.ok) throw new Error(await res.text());
+      const inv = S.invoices.find(r=>r.id===id);
+      if(inv) inv[field]=val||null;
+      toast('已保存','ok');
+      renderT1();
+      if(field==='recon_no'||field==='payment_method') renderT3();
+    } catch(e) { toast('保存失败: '+e.message,'er'); renderT1(); console.error(e); }
   };
   inp.onkeydown = e=>{if(e.key==='Enter')inp.blur();};
+}
+
+async function editInlineSelect(td, id, field, current, options) {
+  const sel = document.createElement('select');
+  sel.className = 'cell-input';
+  sel.style.cssText = 'width:100%;padding:4px 6px;font-size:12px;';
+  sel.innerHTML = '<option value="">—</option>' + options.map(o=>`<option value="${o}" ${o===current?'selected':''}>${o}</option>`).join('');
+  td.innerHTML = '';
+  td.appendChild(sel);
+  sel.focus();
+  sel.onchange = async () => {
+    const val = sel.value;
+    try {
+      await db.update('invoices', {[field]: val||null}, `?id=eq.${id}`);
+      const inv = S.invoices.find(r=>r.id===id);
+      if(inv) inv[field] = val||null;
+      toast('已保存','ok');
+      renderT1();
+      renderT3();
+    } catch(e) { toast('保存失败: '+e.message,'er'); renderT1(); }
+  };
+  sel.onblur = () => setTimeout(()=>renderT1(), 150);
 }
 
 async function editVin(td, id, field, current) {
@@ -1445,22 +1476,37 @@ async function openInvoiceDetail(id) {
 async function saveInvoiceEdit() {
   const id = S.editingInvoice;
   if(!id) return;
-  const updates = {
-    recon_no: document.getElementById('eReconNo').value||null,
-    payment_date: document.getElementById('ePayDate').value||null,
-    payment_method: document.getElementById('ePayMethod').value||null,
-    contract_type: document.getElementById('eContract').value||null,
-    notes: document.getElementById('eNotes').value||null,
-  };
+  const updates = {};
+  const rn = document.getElementById('eReconNo').value;
+  const pd = document.getElementById('ePayDate').value;
+  const pm = document.getElementById('ePayMethod').value;
+  const ct = document.getElementById('eContract').value;
+  const nt = document.getElementById('eNotes').value;
+  if(rn!==undefined) updates.recon_no = rn||null;
+  if(pd!==undefined) updates.payment_date = pd||null;
+  if(pm!==undefined) updates.payment_method = pm||null;
+  if(ct!==undefined) updates.contract_type = ct||null;
+  if(nt!==undefined) updates.notes = nt||null;
   try {
-    await db.update('invoices', updates, `?id=eq.${id}`);
+    const url = `${SUPA_URL}/rest/v1/invoices?id=eq.${id}`;
+    const res = await fetch(url, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': SUPA_KEY,
+        'Authorization': `Bearer ${SUPA_KEY}`,
+        'Prefer': 'return=representation',
+      },
+      body: JSON.stringify(updates),
+    });
+    if(!res.ok) throw new Error(await res.text());
     const inv = S.invoices.find(r=>r.id===id);
     if(inv) Object.assign(inv, updates);
     toast('已保存','ok');
     closeModal('invoiceModal');
     renderT1();
     renderT3();
-  } catch(e) { toast('保存失败','er'); }
+  } catch(e) { toast('保存失败: '+e.message,'er'); console.error(e); }
 }
 
 // ═══════════════════════════════════════════════════════════
