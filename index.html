@@ -1057,7 +1057,7 @@ function renderT1(filter='', status='', payment='') {
         <span style="font-weight:600;color:var(--ac);font-family:var(--mn);font-size:12px">${r.invoice_no}</span>
         ${isOverdue?'<span class="bd bd-er" style="margin-left:4px">逾期</span>':''}
       </td>
-      <td class="ec mono" style="font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" title="${r.reference||''}" onclick="editCell(this,'${r.id}','reference','${(r.reference||'').replace(/'/g,''')}')">${r.reference||'<span style=\"color:var(--t3)\">点击编辑</span>'}</td>
+      <td class="ec mono" style="font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" onclick="editCellById('${r.id}','reference',this)">${r.reference||'<span style=\"color:var(--t3)\">点击编辑</span>'}</td>
       <td class="mono" style="font-size:12px;color:${isOverdue?'var(--er)':'var(--t2)'}">${r.due_date||'—'}</td>
       <td class="num">${fmt(r.invoice_amount)}</td>
       <td class="num" style="color:var(--ok)">${r.payments>0?fmt(r.payments):'—'}</td>
