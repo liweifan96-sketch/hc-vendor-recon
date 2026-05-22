@@ -792,7 +792,7 @@ function parseStatementPDF(text, store, statementMonth) {
 
     // Extract amounts: 3 numbers in sequence
     const nums = [];
-    const numReg = /([\d,]+\.\d2)/g;
+    const numReg = /([\d,]+\.\d{1,2})/g;
     let nm;
     while((nm=numReg.exec(seg))!==null && nums.length<4) {
       nums.push(parseFloat(nm[1].replace(/,/g,'')));
