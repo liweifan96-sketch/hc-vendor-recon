@@ -1064,10 +1064,10 @@ function renderT1(filter='', status='', payment='') {
       <td class="num" style="font-weight:700;color:${r.balance_aud>0?'var(--tx)':'var(--ok)'}">${fmt(r.balance_aud)}</td>
       <td>${catBadge}</td>
       <td class="ec mono" style="font-size:12px;color:var(--ac4)" onclick="editCell(this,'${r.id}','recon_no','${r.recon_no||''}')">${r.recon_no||'<span style="color:var(--t3)">点击设置</span>'}</td>
-      <td onclick="editInlineSelect(this,'${r.id}','payment_method','${r.payment_method||''}',['直接支付','贷款'])" style="cursor:pointer">
+      <td onclick="editInlineSelectById('${r.id}','payment_method',this,['直接支付','贷款'])" style="cursor:pointer">
         ${r.payment_method ? (r.payment_method==='直接支付'?'<span class=\"bd bd-ok\">直接支付</span>':'<span class=\"bd bd-ac\">贷款</span>') : '<span style=\"color:var(--t3);font-size:12px\">点击设置</span>'}
       </td>
-      <td onclick="editInlineSelect(this,'${r.id}','contract_type','${r.contract_type||''}',['确认合同','自有'])" style="cursor:pointer">
+      <td onclick="editInlineSelectById('${r.id}','contract_type',this,['确认合同','自有'])" style="cursor:pointer">
         ${r.contract_type ? '<span class=\"bd bd-mu\">'+r.contract_type+'</span>' : '<span style=\"color:var(--t3);font-size:12px\">点击设置</span>'}
       </td>
       <td class="mono" style="font-size:11px">${r.payment_date||'—'}</td>
@@ -1138,20 +1138,20 @@ function renderT2(filter='', saleStatus='', profitFilter='', contractFilter='') 
       <td class="num" style="font-size:11px;color:var(--t3)">${fmt(r.purchase_gst)}</td>
       <td class="num" style="font-weight:600">${fmt(r.purchase_total)}</td>
       <!-- 我方 -->
-      <td class="num ec" style="border-left:2px solid var(--b1)" onclick="editVin(this,'${r.id}','purchase_price_ex','${r.purchase_price_ex||''}')">${fmt(r.purchase_price_ex)}</td>
-      <td class="num ec" onclick="editVin(this,'${r.id}','gst_rate','10')">${r.gst_rate||10}%</td>
+      <td class="num ec" style="border-left:2px solid var(--b1)" onclick="editVinById('${r.id}','purchase_price_ex',this)">${fmt(r.purchase_price_ex)}</td>
+      <td class="num ec" onclick="editVinById('${r.id}','gst_rate',this)">${r.gst_rate||10}%</td>
       <td class="num">${fmt(r.purchase_total)}</td>
       <td class="num" style="color:${diff===0?'var(--ok)':diff?'var(--er)':'var(--t3)'}">${diff===null?'—':(diff>=0?'+':'')+fmt(diff)}</td>
       <!-- 销售 -->
-      <td class="mono ec" style="border-left:2px solid var(--b1);font-size:11px;color:var(--ac4)" onclick="editVin(this,'${r.id}','sale_inv_no','${r.sale_inv_no||''}')">${r.sale_inv_no||'<span style="color:var(--t3)">—</span>'}</td>
-      <td class="num ec" onclick="editVin(this,'${r.id}','sale_price_ex','${r.sale_price_ex||''}')">${fmt(r.sale_price_ex)}</td>
+      <td class="mono ec" style="border-left:2px solid var(--b1);font-size:11px;color:var(--ac4)" onclick="editVinById('${r.id}','sale_inv_no',this)">${r.sale_inv_no||'<span style="color:var(--t3)">—</span>'}</td>
+      <td class="num ec" onclick="editVinById('${r.id}','sale_price_ex',this)">${fmt(r.sale_price_ex)}</td>
       <td class="num" style="color:${profit>0?'var(--ok)':profit<0?'var(--er)':'var(--t3)'}">${profit!=null?fmt(profit):'—'}</td>
       <td class="num" style="color:${rate>20?'var(--ok)':rate>0?'var(--wn)':'var(--er)'}">${rate!=null?rate+'%':'—'}</td>
-      <td class="ec" onclick="editVinSelect(this,'${r.id}','sale_status','${r.sale_status||''}',['全款','欠款','未售','租赁'])">${saleBadge}</td>
+      <td class="ec" onclick="editVinSelectById('${r.id}','sale_status',this,['全款','欠款','未售','租赁'])">${saleBadge}</td>
       <!-- 对账 -->
-      <td class="ec mono" style="border-left:2px solid var(--b1);font-size:12px;color:var(--ac4)" onclick="editVin(this,'${r.id}','recon_no','${r.recon_no||''}')">${r.recon_no||'<span style="color:var(--t3)">—</span>'}</td>
-      <td class="ec" onclick="editVinSelect(this,'${r.id}','contract_type','${r.contract_type||''}',['确认合同','自有'])">${r.contract_type?`<span class="bd bd-mu">${r.contract_type}</span>`:'—'}</td>
-      <td class="ec" onclick="editVinSelect(this,'${r.id}','payment_method','${r.payment_method||''}',['直接支付','贷款'])">${r.payment_method?`<span class="bd ${r.payment_method==='直接支付'?'bd-ok':'bd-ac'}">${r.payment_method}</span>`:'—'}</td>
+      <td class="ec mono" style="border-left:2px solid var(--b1);font-size:12px;color:var(--ac4)" onclick="editVinById('${r.id}','recon_no',this)">${r.recon_no||'<span style="color:var(--t3)">—</span>'}</td>
+      <td class="ec" onclick="editVinSelectById('${r.id}','contract_type',this,['确认合同','自有'])">${r.contract_type?`<span class="bd bd-mu">${r.contract_type}</span>`:'—'}</td>
+      <td class="ec" onclick="editVinSelectById('${r.id}','payment_method',this,['直接支付','贷款'])">${r.payment_method?`<span class="bd ${r.payment_method==='直接支付'?'bd-ok':'bd-ac'}">${r.payment_method}</span>`:'—'}</td>
     </tr>`;
   }).join('');
 }
@@ -1308,6 +1308,12 @@ function renderT4() {
 // ═══════════════════════════════════════════════════════════
 // CELL EDITING
 // ═══════════════════════════════════════════════════════════
+function editCellById(id, field, td) {
+  const inv = S.invoices.find(r=>r.id===id);
+  const current = inv ? (inv[field]||'') : '';
+  editCell(td, id, field, current);
+}
+
 function editCell(td, id, field, current) {
   const inp = document.createElement('input');
   inp.className = 'cell-input';
@@ -1334,6 +1340,12 @@ function editCell(td, id, field, current) {
     } catch(e) { toast('保存失败: '+e.message,'er'); renderT1(); console.error(e); }
   };
   inp.onkeydown = e=>{if(e.key==='Enter')inp.blur();};
+}
+
+function editInlineSelectById(id, field, td, options) {
+  const inv = S.invoices.find(r=>r.id===id);
+  const current = inv ? (inv[field]||'') : '';
+  editInlineSelect(td, id, field, current, options);
 }
 
 async function editInlineSelect(td, id, field, current, options) {
