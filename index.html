@@ -743,17 +743,19 @@ async function handleXlsUpload(input,type){
 }
 
 async function importPurchase(rows,keys){
-  const vinCol=keys.find(k=>k.includes('车架号')||k.toLowerCase()==='vin')||'';
-  const priceCol=keys.find(k=>k==='Price'||k==='价格'||k.toLowerCase()==='price')||'';
-  const cnCol=keys.find(k=>k.includes('合同号')&&!k.includes('已付'))||'';
-  const codeCol=keys.find(k=>k.includes('DJJ')||k.includes('Code')||k.includes('发票号'))||'';
-  const modelCol=keys.find(k=>k.includes('适配机型')||k.includes('规格')||k.includes('型号'))||'';
-  const subCol=keys.find(k=>k.includes('Subtotal')||k.includes('小计'))||priceCol;
+  // Column names may have prefix "+ " or "= "
+  const norm=k=>k.replace(/^[+=\s]+/,'').trim();
+  const vinCol=keys.find(k=>norm(k).includes('车架号')||norm(k).toLowerCase()==='vin')||'';
+  // Prefer Subtotal over Price (Subtotal = actual purchase amount)
+  const subCol=keys.find(k=>norm(k).includes('Subtotal')||norm(k).includes('小计'))||'';
+  const priceCol=subCol||keys.find(k=>norm(k).includes('价格 Price')||norm(k).includes('Price')||norm(k).includes('价格'))||'';
+  const cnCol=keys.find(k=>norm(k).includes('合同号')&&!norm(k).includes('已付'))||'';
+  const codeCol=keys.find(k=>norm(k).includes('DJJ Code')||norm(k).includes('DJJ唯一代码'))||'';
+  const modelCol=keys.find(k=>norm(k).includes('适配机型')||norm(k).includes('规格'))||'';
 
   // Debug: show detected columns
   console.log('Excel列名:', keys);
-  console.log('识别到: VIN列=', vinCol, ' 价格列=', priceCol, ' 合同号=', cnCol, ' DJJ Code=', codeCol, ' 型号=', modelCol);
-  toast(`列名识别：VIN="${vinCol}" 价格="${priceCol||subCol}" 合同号="${cnCol}"`, 'ok', 6000);
+  toast(`列识别: VIN="${vinCol||'❌未找到'}" 价格="${priceCol||'❌未找到'}" 合同号="${cnCol||'空'}" DJJ="${codeCol||'空'}"`, 'ok', 6000);
 
   // Filter valid rows
   const validRows=rows.filter(r=>(r[vinCol]||'').toString().trim());
@@ -769,7 +771,7 @@ async function importPurchase(rows,keys){
   const toInsert=[],changedRows=[];
   for(const row of validRows){
     const vin=(row[vinCol]||'').toString().trim();
-    const price=parseFloat((row[subCol]||row[priceCol]||'0').toString().replace(/[$,]/g,''))||0;
+    const price=parseFloat((row[priceCol]||'0').toString().replace(/[$,]/g,''))||0;
     const gst=r2(price*0.1);
     const invNo=(row[codeCol]||'').toString().trim();
     const po=(row[cnCol]||'').toString().trim();
@@ -841,14 +843,15 @@ async function applyDiffs(changedRows,table,bannerId){
 }
 
 async function importSales(rows,keys){
-  const vinCol=keys.find(k=>k.includes('车架号')||k.toLowerCase()==='vin')||'';
-  const invCol=keys.find(k=>k.includes('唯一销售单号')||k.includes('销售单号'))||'';
-  const priceCol=keys.find(k=>k.includes('不含税销售价')||k.includes('not including GST')||k.includes('不含税'))||'';
-  const statusCol=keys.find(k=>k.includes('销售状态')||k.includes('出库状态')||k.includes('状态'))||'';
+  const norm2=k=>k.replace(/^[+=\s💰]+/,'').trim();
+  const vinCol=keys.find(k=>norm2(k).includes('车架号'))||'';
+  const invCol=keys.find(k=>norm2(k).includes('唯一销售单号'))||'';
+  // Total Amount(not including GST) is the key column
+  const priceCol=keys.find(k=>norm2(k).includes('not including GST')||norm2(k).includes('不含税销售价'))||'';
+  const statusCol=keys.find(k=>norm2(k).includes('出库状态')||norm2(k).includes('销售状态'))||'';
 
   console.log('销售Excel列名:', keys);
-  console.log('识别到: VIN列=', vinCol, ' 销售单号=', invCol, ' 价格=', priceCol, ' 状态=', statusCol);
-  toast(`列名识别：VIN="${vinCol}" 销售单号="${invCol}" 价格="${priceCol}"`, 'ok', 6000);
+  toast(`销售列识别: VIN="${vinCol||'❌未找到'}" 销售单号="${invCol||'空'}" 价格="${priceCol||'空'}" 状态="${statusCol||'空'}"`, 'ok', 6000);
 
   const validRows=rows.filter(r=>(r[vinCol]||'').toString().trim());
   if(!validRows.length){
