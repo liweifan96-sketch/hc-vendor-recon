@@ -610,7 +610,7 @@ function ecText(id,field,td,table){
     }catch(e){toast('保存失败: '+e.message,'er');console.error(e)}
     if(table==='invoices')renderT1();
     else renderT2();
-    renderT3();
+    // Don't call renderT3 on every cell edit - too slow
   };
   inp.onkeydown=e=>{if(e.key==='Enter')inp.blur()};
 }
@@ -640,7 +640,6 @@ function ecSel(id,field,td,table,opts){
     }catch(e){toast('保存失败: '+e.message,'er')}
     if(table==='invoices')renderT1();
     else renderT2();
-    renderT3();
   };
   sel.onblur=()=>setTimeout(()=>{if(table==='invoices')renderT1();else renderT2()},200);
 }
@@ -702,7 +701,12 @@ function renderT2(){
     if(pr==='lt20')return rt>=0&&rt<20;if(pr==='gt20')return rt>=20;return true;
   })}
   const ssBadge={'未售出':'<span class="bd b-mu">未售出</span>','已收定金':'<span class="bd b-wn">已收定金</span>','已全款':'<span class="bd b-ok">已全款</span>','特殊':'<span class="bd b-pu">特殊</span>','全款':'<span class="bd b-ok">全款</span>','未售':'<span class="bd b-mu">未售</span>'};
-  document.getElementById('t2b').innerHTML=rows.length?rows.map(r=>`<tr>
+  // Limit display to 500 rows for performance
+  const displayRows=rows.slice(0,500);
+  if(rows.length>500){
+    document.getElementById('t2b').innerHTML='<tr><td colspan="16" style="padding:8px 10px;background:#fff8dc;color:#92400e;font-size:12px">⚠ 共'+rows.length+'条，当前显示前500条，请使用搜索筛选</td></tr>';
+  }
+  document.getElementById('t2b').innerHTML+=(displayRows.length?displayRows.map(r=>`<tr>
     <td class="mono ec" style="font-size:11px;color:var(--ac);cursor:pointer" onclick="ecText('${r.id}','invoice_no',this,'vin_details')">${r.invoice_no||'<span style="color:var(--t3)">—</span>'}</td>
     <td class="mono ec" style="font-size:11px;cursor:pointer" onclick="ecText('${r.id}','purchase_po',this,'vin_details')">${r.purchase_po||'<span style="color:var(--t3)">—</span>'}</td>
     <td class="mono ec" style="font-weight:600;cursor:pointer" onclick="ecText('${r.id}','vin',this,'vin_details')">${r.vin||'—'}</td>
@@ -719,7 +723,7 @@ function renderT2(){
     <td class="mono ec" style="border-left:2px solid var(--b1);font-size:12px;color:var(--wn);cursor:pointer" onclick="ecText('${r.id}','recon_no',this,'vin_details')">${r.recon_no||'<span style="color:var(--t3)">—</span>'}</td>
     <td class="ec" style="cursor:pointer" onclick="ecSel('${r.id}','contract_type',this,'vin_details',['确认合同','自有'])">${r.contract_type?`<span class="bd b-mu">${r.contract_type}</span>`:'<span style="color:var(--t3);font-size:12px">点击设置</span>'}</td>
     <td class="ec" style="cursor:pointer" onclick="ecSel('${r.id}','payment_method',this,'vin_details',['直接支付','贷款'])">${r.payment_method?`<span class="bd ${r.payment_method==='直接支付'?'b-ok':'b-ac'}">${r.payment_method}</span>`:'<span style="color:var(--t3);font-size:12px">点击设置</span>'}</td>
-  </tr>`).join(''):'<tr><td colspan="16" style="text-align:center;padding:32px;color:var(--t3)">暂无VIN数据，请上传采购录入表Excel</td></tr>';
+  </tr>`).join(''):'')+'<tr><td colspan="16" style="text-align:center;padding:32px;color:var(--t3)">'+(rows.length?'':'暂无VIN数据，请上传采购录入表Excel')+'</td></tr>';
 }
 
 // ── EXCEL UPLOAD ──
@@ -1189,7 +1193,6 @@ function showPODetail(po){
   </table></div>`;
   document.getElementById('poMo').classList.add('on');
 }
-
 // ── RENDER T4 ──
 function renderT4(){
   const byM={};
