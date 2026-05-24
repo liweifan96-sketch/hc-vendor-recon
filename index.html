@@ -2,190 +2,184 @@
 <html lang="zh">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>HC Forklift · 供应商对账系统</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Outfit:wght@300;400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;700&display=swap');
-:root {
-  --bg:#f0f2f5; --s1:#fff; --s2:#f7f8fc; --b1:#e8eaed; --b2:#d1d5db;
-  --tx:#0f172a; --t2:#475569; --t3:#94a3b8;
-  --ac:#2563eb; --ok:#059669; --er:#dc2626; --wn:#d97706; --pu:#7c3aed;
-  --mn:'DM Mono',monospace; --hd:'Outfit',sans-serif; --bd:'Noto Sans SC',sans-serif;
-  --r:10px; --sh:0 1px 3px rgba(0,0,0,.08);
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Outfit:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;700&display=swap');
+:root{
+  --bg:#f0f2f5;--s1:#fff;--s2:#f7f8fc;--b1:#e8eaed;--b2:#d1d5db;
+  --tx:#0f172a;--t2:#475569;--t3:#94a3b8;
+  --ac:#2563eb;--ok:#059669;--er:#dc2626;--wn:#d97706;
+  --mn:'DM Mono',monospace;--hd:'Outfit',sans-serif;--bd:'Noto Sans SC',sans-serif;
+  --r:10px;--sh:0 1px 3px rgba(0,0,0,.08);
 }
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:var(--bg);color:var(--tx);font-family:var(--bd);font-size:14px;min-height:100vh}
-.topnav{background:var(--s1);border-bottom:1px solid var(--b1);display:flex;align-items:center;padding:0 24px;height:56px;position:sticky;top:0;z-index:100;box-shadow:var(--sh);gap:16px}
-.logo{display:flex;align-items:center;gap:10px;font-family:var(--hd);font-size:16px;font-weight:700;white-space:nowrap}
-.logo-icon{width:32px;height:32px;background:var(--ac);border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:15px;font-weight:800}
-.logo-sub{font-size:10px;font-weight:400;color:var(--t3);font-family:var(--mn)}
+/* NAV */
+.nav{background:var(--s1);border-bottom:1px solid var(--b1);display:flex;align-items:center;padding:0 20px;height:54px;position:sticky;top:0;z-index:100;box-shadow:var(--sh);gap:14px}
+.logo{display:flex;align-items:center;gap:9px;font-family:var(--hd);font-size:15px;font-weight:700;white-space:nowrap}
+.li{width:30px;height:30px;background:var(--ac);border-radius:7px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px;font-weight:800}
+.ls{font-size:10px;font-weight:400;color:var(--t3);font-family:var(--mn)}
 .tabs{display:flex;gap:2px}
-.tab{padding:8px 16px;border-radius:8px;font-size:13px;font-weight:500;color:var(--t2);cursor:pointer;transition:all .15s;border:none;background:none;font-family:var(--bd);white-space:nowrap}
-.tab:hover{background:var(--s2);color:var(--tx)}
-.tab.active{background:#dbeafe;color:var(--ac);font-weight:600}
-.tnr{margin-left:auto;display:flex;align-items:center;gap:8px}
-.store-sel{display:flex;gap:4px}
-.sbtn{padding:4px 12px;border-radius:6px;border:1px solid var(--b2);background:var(--s1);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;color:var(--t2)}
-.sbtn:hover{border-color:var(--ac);color:var(--ac)}
-.sbtn.active{background:var(--ac);color:#fff;border-color:var(--ac)}
-.sbtn.perth.active{background:#d97706;border-color:#d97706}
-.sbtn.bris.active{background:var(--ok);border-color:var(--ok)}
-.panel{display:none;padding:20px 24px}
-.panel.active{display:block}
-/* stats */
-.stat-row{display:flex;gap:12px;margin-bottom:18px;flex-wrap:wrap}
-.stat{background:var(--s1);border:1px solid var(--b1);border-radius:var(--r);padding:14px 18px;flex:1;min-width:130px;box-shadow:var(--sh)}
-.sv{font-family:var(--hd);font-size:22px;font-weight:700}
-.sl{font-size:11px;color:var(--t3);margin-top:3px;font-family:var(--mn)}
-.stat.bl .sv{color:var(--ac)} .stat.gn .sv{color:var(--ok)} .stat.rd .sv{color:var(--er)} .stat.am .sv{color:var(--wn)}
-/* table */
+.tab{padding:7px 14px;border-radius:7px;font-size:13px;font-weight:500;color:var(--t2);cursor:pointer;border:none;background:none;font-family:var(--bd);white-space:nowrap;transition:all .15s}
+.tab:hover{background:var(--s2)}
+.tab.on{background:#dbeafe;color:var(--ac);font-weight:600}
+.nr{margin-left:auto;display:flex;align-items:center;gap:7px}
+.ss{display:flex;gap:3px}
+.sb{padding:4px 11px;border-radius:6px;border:1px solid var(--b2);background:var(--s1);font-size:12px;font-weight:600;cursor:pointer;color:var(--t2);transition:all .15s}
+.sb:hover{border-color:var(--ac);color:var(--ac)}
+.sb.on{background:var(--ac);color:#fff;border-color:var(--ac)}
+.sb.perth.on{background:#d97706;border-color:#d97706}
+.sb.bris.on{background:var(--ok);border-color:var(--ok)}
+/* PANEL */
+.pnl{display:none;padding:18px 22px}
+.pnl.on{display:block}
+/* STATS */
+.sr{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap}
+.sc{background:var(--s1);border:1px solid var(--b1);border-radius:var(--r);padding:13px 16px;flex:1;min-width:120px;box-shadow:var(--sh)}
+.sv{font-family:var(--hd);font-size:20px;font-weight:700}
+.sl{font-size:11px;color:var(--t3);margin-top:2px;font-family:var(--mn)}
+.sc.bl .sv{color:var(--ac)}.sc.gn .sv{color:var(--ok)}.sc.am .sv{color:var(--wn)}.sc.rd .sv{color:var(--er)}
+/* TABLE */
 .tw{overflow-x:auto;border-radius:var(--r);border:1px solid var(--b1)}
 table{width:100%;border-collapse:collapse;font-size:13px}
 thead tr{background:#f8fafc;border-bottom:2px solid var(--b1)}
-th{padding:9px 11px;text-align:left;font-size:11px;font-weight:700;color:var(--t2);white-space:nowrap;font-family:var(--mn);text-transform:uppercase;letter-spacing:.3px;cursor:pointer;user-select:none}
+th{padding:8px 10px;text-align:left;font-size:11px;font-weight:700;color:var(--t2);white-space:nowrap;font-family:var(--mn);text-transform:uppercase;letter-spacing:.3px;cursor:pointer;user-select:none}
 th:hover{color:var(--ac)}
-td{padding:9px 11px;border-bottom:1px solid var(--b1);vertical-align:middle}
+td{padding:8px 10px;border-bottom:1px solid var(--b1);vertical-align:middle}
 tbody tr:hover{background:#f8fafc}
 tbody tr:last-child td{border-bottom:none}
 .num{font-family:var(--mn);text-align:right}
 .mono{font-family:var(--mn)}
-/* badges */
+/* BADGES */
 .bd{display:inline-flex;align-items:center;padding:2px 7px;border-radius:4px;font-size:11px;font-weight:600;white-space:nowrap}
-.ok{background:#dcfce7;color:#15803d} .er{background:#fee2e2;color:#991b1b}
-.wn{background:#fef3c7;color:#92400e} .ac{background:#dbeafe;color:#1d4ed8}
-.mu{background:#f1f5f9;color:#475569} .pu{background:#f3e8ff;color:#7e22ce}
-/* buttons */
-.btn{display:inline-flex;align-items:center;gap:5px;padding:7px 14px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;border:none;transition:all .15s;font-family:var(--bd)}
-.bp{background:var(--ac);color:#fff} .bp:hover{background:#1d4ed8}
-.bs{background:var(--s2);color:var(--t2);border:1px solid var(--b2)} .bs:hover{background:var(--b1)}
+.b-ok{background:#dcfce7;color:#15803d}.b-er{background:#fee2e2;color:#991b1b}
+.b-wn{background:#fef3c7;color:#92400e}.b-ac{background:#dbeafe;color:#1d4ed8}
+.b-mu{background:#f1f5f9;color:#475569}.b-pu{background:#f3e8ff;color:#7e22ce}
+/* BTN */
+.btn{display:inline-flex;align-items:center;gap:5px;padding:7px 13px;border-radius:7px;font-size:13px;font-weight:500;cursor:pointer;border:none;font-family:var(--bd);transition:all .15s}
+.bp{background:var(--ac);color:#fff}.bp:hover{background:#1d4ed8}
+.bs{background:var(--s2);color:var(--t2);border:1px solid var(--b2)}.bs:hover{background:var(--b1)}
 .bg{background:var(--ok);color:#fff}
-.bsm{padding:4px 10px;font-size:12px}
-/* inputs */
-.inp{width:100%;padding:7px 11px;border:1px solid var(--b2);border-radius:7px;font-size:13px;color:var(--tx);background:var(--s1);font-family:var(--bd);outline:none;transition:border .15s}
+.sm{padding:4px 9px;font-size:12px}
+/* INP */
+.inp{width:100%;padding:7px 10px;border:1px solid var(--b2);border-radius:6px;font-size:13px;color:var(--tx);background:var(--s1);font-family:var(--bd);outline:none;transition:border .15s}
 .inp:focus{border-color:var(--ac);box-shadow:0 0 0 3px rgba(37,99,235,.1)}
 select.inp{cursor:pointer}
-.il{font-size:12px;font-weight:600;color:var(--t2);margin-bottom:4px}
-.ig{display:flex;flex-direction:column;gap:4px}
-/* toolbar */
-.tb{display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap}
-.srch{padding:7px 11px;border:1px solid var(--b2);border-radius:8px;font-size:13px;color:var(--tx);background:var(--s1);outline:none;width:200px;font-family:var(--bd)}
+/* TOOLBAR */
+.tb{display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+.srch{padding:6px 10px;border:1px solid var(--b2);border-radius:7px;font-size:13px;color:var(--tx);background:var(--s1);outline:none;width:190px;font-family:var(--bd)}
 .srch:focus{border-color:var(--ac)}
-.fsel{padding:6px 10px;border:1px solid var(--b2);border-radius:8px;font-size:12px;color:var(--tx);background:var(--s1);cursor:pointer;font-family:var(--bd)}
-/* month chips */
-.mchips{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}
-.mc{padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid var(--b2);background:var(--s1);color:var(--t2);transition:all .15s;font-family:var(--mn)}
+.fsl{padding:5px 8px;border:1px solid var(--b2);border-radius:7px;font-size:12px;color:var(--tx);background:var(--s1);cursor:pointer;font-family:var(--bd)}
+/* MONTH CHIPS */
+.mcs{display:flex;gap:5px;margin-bottom:12px;flex-wrap:wrap}
+.mc{padding:3px 11px;border-radius:20px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid var(--b2);background:var(--s1);color:var(--t2);transition:all .15s;font-family:var(--mn)}
 .mc:hover{border-color:var(--ac);color:var(--ac)}
-.mc.active{background:var(--ac);color:#fff;border-color:var(--ac)}
-/* inline select cell */
-.ec{cursor:pointer;position:relative}
-.ec:hover{background:#f0f7ff}
-.ci{width:100%;border:1px solid var(--ac);border-radius:4px;padding:3px 6px;font-size:12px;font-family:var(--mn);outline:none;background:#fff}
-/* loading */
+.mc.on{background:var(--ac);color:#fff;border-color:var(--ac)}
+/* LOADING */
 .lov{display:none;position:fixed;inset:0;background:rgba(255,255,255,.85);z-index:1000;place-items:center}
-.lov.show{display:grid}
-.lb{background:var(--s1);border:1px solid var(--b1);border-radius:14px;padding:28px 36px;text-align:center;box-shadow:0 4px 16px rgba(0,0,0,.1)}
-.ls{width:36px;height:36px;border:3px solid var(--b1);border-top-color:var(--ac);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 12px}
+.lov.on{display:grid}
+.lb{background:var(--s1);border:1px solid var(--b1);border-radius:12px;padding:26px 34px;text-align:center;box-shadow:0 4px 16px rgba(0,0,0,.1)}
+.ls2{width:34px;height:34px;border:3px solid var(--b1);border-top-color:var(--ac);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 10px}
 @keyframes spin{to{transform:rotate(360deg)}}
 .lt{font-size:13px;color:var(--t2);font-family:var(--mn)}
-/* toast */
-.tw2{position:fixed;bottom:20px;right:20px;z-index:2000;display:flex;flex-direction:column;gap:6px}
-.toast{padding:10px 16px;border-radius:9px;font-size:13px;font-weight:500;box-shadow:0 4px 12px rgba(0,0,0,.12);animation:si .3s ease;max-width:340px}
+/* TOAST */
+.tw3{position:fixed;bottom:18px;right:18px;z-index:2000;display:flex;flex-direction:column;gap:5px}
+.tst{padding:9px 14px;border-radius:8px;font-size:13px;font-weight:500;box-shadow:0 3px 10px rgba(0,0,0,.12);animation:si .25s ease;max-width:320px}
 @keyframes si{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}
 .tok{background:#dcfce7;color:#15803d;border:1px solid #86efac}
 .ter{background:#fee2e2;color:#991b1b;border:1px solid #fca5a5}
 .twn{background:#fef3c7;color:#92400e;border:1px solid #fcd34d}
-.tif{background:#dbeafe;color:#1d4ed8;border:1px solid #93c5fd}
-/* modal */
+/* MODAL */
 .mo{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:500;place-items:center}
-.mo.show{display:grid}
-.md{background:var(--s1);border-radius:14px;padding:26px;width:520px;max-width:95vw;box-shadow:0 4px 20px rgba(0,0,0,.15);max-height:88vh;overflow-y:auto}
-.mdt{font-family:var(--hd);font-size:16px;font-weight:700;margin-bottom:18px}
-.mdf{display:flex;gap:8px;justify-content:flex-end;margin-top:18px;padding-top:14px;border-top:1px solid var(--b1)}
-/* upload zone */
-.uz{border:2px dashed var(--b2);border-radius:var(--r);padding:28px;text-align:center;cursor:pointer;transition:all .2s;background:var(--s2)}
+.mo.on{display:grid}
+.md{background:var(--s1);border-radius:12px;padding:24px;width:500px;max-width:95vw;box-shadow:0 4px 20px rgba(0,0,0,.15);max-height:90vh;overflow-y:auto}
+.mdt{font-family:var(--hd);font-size:16px;font-weight:700;margin-bottom:16px}
+.mdf{display:flex;gap:8px;justify-content:flex-end;margin-top:16px;padding-top:12px;border-top:1px solid var(--b1)}
+/* UPLOAD ZONE */
+.uz{border:2px dashed var(--b2);border-radius:var(--r);padding:24px;text-align:center;cursor:pointer;transition:all .2s;background:var(--s2)}
 .uz:hover,.uz.drag{border-color:var(--ac);background:#eff6ff}
-.uz.loaded{border-color:var(--ok);background:#f0fdf4}
-/* paste area */
-.paste-area{width:100%;min-height:120px;padding:12px;border:2px dashed var(--b2);border-radius:var(--r);font-size:12px;font-family:var(--mn);resize:vertical;outline:none;background:var(--s2);color:var(--tx);line-height:1.6}
-.paste-area:focus{border-color:var(--ac);background:#fff}
-.paste-hint{font-size:11px;color:var(--t3);margin-top:6px;font-family:var(--mn)}
-/* section */
-.sh{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
-.st{font-family:var(--hd);font-size:17px;font-weight:700}
-.ss{font-size:11px;color:var(--t3);font-family:var(--mn);margin-top:2px}
-/* card */
-.card{background:var(--s1);border:1px solid var(--b1);border-radius:var(--r);padding:18px;box-shadow:var(--sh)}
-/* biz grid */
-.biz-grid{display:grid;gap:12px;margin-bottom:20px}
-.biz-card{background:var(--s1);border:1px solid var(--b1);border-radius:var(--r);padding:16px;box-shadow:var(--sh);border-left:4px solid var(--wn)}
-.biz-po{font-family:var(--mn);font-size:13px;font-weight:700;color:var(--tx);margin-bottom:8px}
-.biz-row{display:flex;gap:12px;flex-wrap:wrap;font-size:12px}
-.biz-col{flex:1;min-width:120px}
-.biz-label{color:var(--t3);font-family:var(--mn);margin-bottom:2px;font-size:11px}
-.biz-val{font-family:var(--mn);font-weight:600}
-tr.new-inv{background:#f0fdf4!important}
+.uz.ok{border-color:var(--ok);background:#f0fdf4}
+/* SECTION */
+.sh{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.st{font-family:var(--hd);font-size:16px;font-weight:700}
+.ss2{font-size:11px;color:var(--t3);font-family:var(--mn);margin-top:2px}
+/* EDITABLE TABLE */
+.et-wrap{border:1px solid var(--b1);border-radius:var(--r);overflow:auto;max-height:60vh}
+.et{width:100%;border-collapse:collapse;font-size:12px}
+.et th{background:#f8fafc;border:1px solid var(--b1);padding:7px 9px;font-size:11px;font-weight:700;color:var(--t2);white-space:nowrap;font-family:var(--mn);text-transform:uppercase;letter-spacing:.2px;position:sticky;top:0;z-index:2}
+.et td{border:1px solid var(--b1);padding:0}
+.et td input,.et td select{width:100%;border:none;outline:none;padding:6px 8px;font-size:12px;font-family:var(--mn);background:transparent;color:var(--tx)}
+.et td input:focus,.et td select:focus{background:#eff6ff}
+.et td.ro{padding:6px 8px;font-family:var(--mn);color:var(--t3);background:#fafafa;text-align:right}
+.et tbody tr:hover td{background:#f8fafc}
+.et tbody tr:hover td input,.et tbody tr:hover td select{background:#f8fafc}
+.et-toolbar{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+/* INLINE EDIT CELL */
+.ec{cursor:pointer}
+.ec:hover{background:#f0f7ff!important}
+.ci{width:100%;border:1px solid var(--ac)!important;border-radius:3px;padding:3px 6px;font-size:12px;font-family:var(--mn);outline:none;background:#fff}
+/* PO DETAIL MODAL */
+.md-wide{width:720px}
+/* new-inv row */
+tr.ni td{background:#f0fdf4!important}
 tr.ign{opacity:.4;text-decoration:line-through}
 </style>
 </head>
 <body>
-<nav class="topnav">
-  <div class="logo">
-    <div class="logo-icon">HC</div>
-    <div><div>供应商对账系统</div><div class="logo-sub">HC FORKLIFT AUSTRALIA · DJJ Equipment</div></div>
-  </div>
+<nav class="nav">
+  <div class="logo"><div class="li">HC</div><div><div>供应商对账系统</div><div class="ls">HC FORKLIFT AUSTRALIA · DJJ Equipment</div></div></div>
   <div class="tabs">
-    <button class="tab active" onclick="sw('t1',this)">📋 Statement对账</button>
+    <button class="tab on" onclick="sw('t1',this)">📋 Statement对账</button>
     <button class="tab" onclick="sw('t2',this)">📦 发票明细</button>
     <button class="tab" onclick="sw('t3',this)">🤝 商务汇总</button>
     <button class="tab" onclick="sw('t4',this)">📊 汇总分析</button>
   </div>
-  <div class="tnr">
-    <div class="store-sel">
-      <button class="sbtn active" onclick="setStore('悉尼',this)">悉尼</button>
-      <button class="sbtn perth" onclick="setStore('珀斯',this)">珀斯</button>
-      <button class="sbtn bris" onclick="setStore('布里斯班',this)">布里斯班</button>
+  <div class="nr">
+    <div class="ss">
+      <button class="sb on" onclick="setSt('悉尼',this)">悉尼</button>
+      <button class="sb perth" onclick="setSt('珀斯',this)">珀斯</button>
+      <button class="sb bris" onclick="setSt('布里斯班',this)">布里斯班</button>
     </div>
-    <button class="btn bp bsm" onclick="showUpload()">↑ 导入Statement</button>
+    <button class="btn bp sm" onclick="showUp()">↑ 导入Statement</button>
   </div>
 </nav>
-<div class="lov" id="lov"><div class="lb"><div class="ls"></div><div class="lt" id="lt">处理中...</div></div></div>
-<div class="tw2" id="tw2"></div>
+<div class="lov" id="lov"><div class="lb"><div class="ls2"></div><div class="lt" id="lt">处理中...</div></div></div>
+<div class="tw3" id="tw3"></div>
 
-<!-- ══ TAB 1: STATEMENT ══ -->
-<div class="panel active" id="t1">
-  <div class="stat-row">
-    <div class="stat bl"><div class="sv" id="s1">—</div><div class="sl">Balance Due AUD</div></div>
-    <div class="stat am"><div class="sv" id="s2">—</div><div class="sl">已逾期</div></div>
-    <div class="stat"><div class="sv" id="s3">—</div><div class="sl">发票总数</div></div>
-    <div class="stat gn"><div class="sv" id="s4">—</div><div class="sl">本月新增</div></div>
-    <div class="stat"><div class="sv" id="s5">—</div><div class="sl">上月延续未付</div></div>
+<!-- ══ TAB1: STATEMENT ══ -->
+<div class="pnl on" id="t1">
+  <div class="sr">
+    <div class="sc bl"><div class="sv" id="s1">—</div><div class="sl">Balance Due AUD</div></div>
+    <div class="sc am"><div class="sv" id="s2">—</div><div class="sl">已逾期</div></div>
+    <div class="sc"><div class="sv" id="s3">—</div><div class="sl">发票总数</div></div>
+    <div class="sc gn"><div class="sv" id="s4">—</div><div class="sl">本月新增</div></div>
+    <div class="sc"><div class="sv" id="s5">—</div><div class="sl">上月延续未付</div></div>
   </div>
-  <div class="mchips" id="mchips"></div>
+  <div class="mcs" id="mcs"></div>
   <div class="tb">
-    <input class="srch" placeholder="搜索发票号/PO/对账号..." oninput="ft1(this.value)" id="t1s">
-    <select class="fsel" onchange="ft1s(this.value)" id="t1sf">
+    <input class="srch" placeholder="搜索发票号/PO/对账号..." oninput="ft1q(this.value)" id="t1sq">
+    <select class="fsl" onchange="ft1s(this.value)">
       <option value="">全部状态</option>
       <option value="new">本月新增</option>
       <option value="carry">上月延续</option>
       <option value="earlier">更早未付</option>
     </select>
-    <select class="fsel" onchange="ft1p(this.value)">
+    <select class="fsl" onchange="ft1p(this.value)">
       <option value="">全部付款方式</option>
       <option value="直接支付">直接支付</option>
       <option value="贷款">贷款</option>
     </select>
-    <div style="margin-left:auto;display:flex;gap:6px">
-      <button class="btn bs bsm" onclick="expT1()">↓ 导出Excel</button>
-    </div>
+    <div style="margin-left:auto"><button class="btn bs sm" onclick="expT1()">↓ 导出Excel</button></div>
   </div>
   <div class="tw">
     <table id="t1t">
       <thead><tr>
         <th onclick="srt('invoice_date')">发票日期</th>
         <th onclick="srt('invoice_no')">发票号</th>
-        <th onclick="srt('reference')">PO/合同号</th>
+        <th>PO/合同号</th>
         <th onclick="srt('due_date')">到期日</th>
         <th class="num">Invoice Amount</th>
         <th class="num">已付</th>
@@ -197,940 +191,923 @@ tr.ign{opacity:.4;text-decoration:line-through}
         <th>付款日期</th>
         <th>操作</th>
       </tr></thead>
-      <tbody id="t1b"><tr><td colspan="13" style="text-align:center;padding:36px;color:var(--t3)">请先导入Statement PDF</td></tr></tbody>
+      <tbody id="t1b"><tr><td colspan="13" style="text-align:center;padding:32px;color:var(--t3)">请先导入Statement PDF</td></tr></tbody>
     </table>
   </div>
 </div>
 
-<!-- ══ TAB 2: 发票明细 ══ -->
-<div class="panel" id="t2">
+<!-- ══ TAB2: 发票明细 ══ -->
+<div class="pnl" id="t2">
   <div class="sh">
-    <div><div class="st">发票明细</div><div class="ss">VIN级别 · 采购价 vs 销售价 · 毛利</div></div>
-    <div style="display:flex;gap:8px">
-      <button class="btn bs bsm" onclick="showPasteModal('purchase')">✎ 粘贴采购录入表</button>
-      <button class="btn bs bsm" onclick="showPasteModal('sales')">✎ 粘贴销售明细表</button>
-      <button class="btn bs bsm" onclick="expT2()">↓ 导出</button>
+    <div><div class="st">发票明细</div><div class="ss2">VIN级别 · 采购价 vs 销售价 · 毛利</div></div>
+    <div style="display:flex;gap:7px">
+      <button class="btn bs sm" onclick="addVinRow()">+ 新增行</button>
+      <button class="btn bs sm" onclick="saveAllVins()">💾 保存全部</button>
+      <button class="btn bs sm" onclick="expT2()">↓ 导出</button>
     </div>
   </div>
   <div class="tb">
-    <input class="srch" placeholder="搜索VIN/发票号/销售单号..." oninput="ft2(this.value)">
-    <select class="fsel" onchange="ft2st(this.value)">
+    <input class="srch" placeholder="搜索VIN/发票号/销售单号..." oninput="ft2q(this.value)">
+    <select class="fsl" onchange="ft2st(this.value)">
       <option value="">全部销售状态</option>
       <option value="全款">全款</option><option value="欠款">欠款</option>
       <option value="未售">未售</option><option value="租赁">租赁</option>
     </select>
-    <select class="fsel" onchange="ft2pr(this.value)">
+    <select class="fsl" onchange="ft2pr(this.value)">
       <option value="">毛利率 全部</option>
       <option value="lt10">&lt;10%</option><option value="lt20">&lt;20%</option>
       <option value="gt20">≥20%</option><option value="neg">负数</option>
     </select>
-    <select class="fsel" onchange="ft2ct(this.value)">
-      <option value="">全部合同类别</option>
-      <option value="确认合同">确认合同</option><option value="自有">自有</option>
-    </select>
   </div>
-  <div class="tw">
-    <table id="t2t">
+  <div style="font-size:12px;color:var(--t3);margin-bottom:6px;font-family:var(--mn)">
+    提示：可直接在表格中编辑；从Excel/Lark复制整行后点击第一个单元格粘贴（Ctrl+V）可批量导入
+  </div>
+  <div class="et-wrap" id="t2wrap">
+    <table class="et" id="t2et">
       <thead><tr>
-        <th>发票号</th><th>VIN</th><th>型号/规格</th>
-        <th class="num" style="border-left:2px solid var(--b1)">采购价(不含税)</th>
-        <th class="num">GST</th><th class="num">采购合计</th>
-        <th style="border-left:2px solid var(--b1)">销售单号</th>
-        <th class="num">销售价(不含税)</th>
-        <th class="num">毛利</th><th class="num">毛利率</th>
-        <th>销售状态</th>
-        <th style="border-left:2px solid var(--b1)">对账号</th>
-        <th>合同类别</th><th>付款方式</th>
+        <th style="width:36px">#</th>
+        <th style="min-width:110px">发票号</th>
+        <th style="min-width:90px">PO号</th>
+        <th style="min-width:120px">VIN</th>
+        <th style="min-width:130px">型号/规格</th>
+        <th class="num" style="min-width:110px">采购价(不含税)</th>
+        <th class="num" style="min-width:70px">GST率%</th>
+        <th class="num" style="min-width:90px">GST</th>
+        <th class="num" style="min-width:100px">采购合计</th>
+        <th style="min-width:110px">销售单号</th>
+        <th class="num" style="min-width:110px">销售价(不含税)</th>
+        <th class="num" style="min-width:80px">毛利</th>
+        <th class="num" style="min-width:70px">毛利率</th>
+        <th style="min-width:90px">销售状态</th>
+        <th style="min-width:100px">对账号</th>
+        <th style="min-width:90px">合同类别</th>
+        <th style="min-width:80px">付款方式</th>
+        <th style="min-width:50px">删除</th>
       </tr></thead>
-      <tbody id="t2b"><tr><td colspan="14" style="text-align:center;padding:36px;color:var(--t3)">请先粘贴采购录入表数据</td></tr></tbody>
+      <tbody id="t2b"></tbody>
     </table>
+  </div>
+  <div style="margin-top:8px;display:flex;align-items:center;gap:8px">
+    <button class="btn bs sm" onclick="addVinRow()">+ 新增行</button>
+    <button class="btn bp sm" onclick="saveAllVins()">💾 保存全部修改</button>
+    <span style="font-size:11px;color:var(--t3);font-family:var(--mn)" id="t2status"></span>
   </div>
 </div>
 
-<!-- ══ TAB 3: 商务汇总 ══ -->
-<div class="panel" id="t3">
+<!-- ══ TAB3: 商务汇总 ══ -->
+<div class="pnl" id="t3">
   <div class="sh">
-    <div><div class="st">商务汇总</div><div class="ss">PO合同级别 · 多次付款记录</div></div>
-    <div style="display:flex;gap:8px">
-      <button class="btn bs bsm" onclick="showPasteModal('biz')">✎ 粘贴商务表</button>
-      <button class="btn bp bsm" onclick="showAddRecon()">+ 新增对账号</button>
-    </div>
+    <div><div class="st">商务汇总</div><div class="ss2">PO合同级别 · 自动汇总采购额 · 付款记录</div></div>
+    <button class="btn bp sm" onclick="showAddRecon()">+ 新增对账号</button>
   </div>
-  <div id="t3rc" style="display:grid;gap:10px;margin-bottom:20px"></div>
-  <div style="font-family:var(--hd);font-size:15px;font-weight:700;margin-bottom:12px">PO合同汇总</div>
+  <div id="t3rc" style="margin-bottom:18px"></div>
+  <div style="font-family:var(--hd);font-size:15px;font-weight:700;margin-bottom:10px">PO合同汇总</div>
   <div class="tw">
     <table id="t3t">
       <thead><tr>
-        <th>PO/合同号</th><th class="num">合同总金额</th>
+        <th>PO/合同号</th>
+        <th class="num">合同采购总额</th>
         <th class="num">Statement余额合计</th>
         <th>已付1</th><th>已付2</th><th>已付3</th><th>已付4</th>
-        <th class="num">已付合计</th><th class="num">剩余</th>
-        <th>对账号</th><th style="text-align:center">发票数</th><th>状态</th>
+        <th class="num">已付合计</th>
+        <th class="num">剩余</th>
+        <th>对账号</th>
+        <th style="text-align:center">发票数</th>
+        <th>状态</th>
       </tr></thead>
-      <tbody id="t3b"><tr><td colspan="12" style="text-align:center;padding:36px;color:var(--t3)">暂无数据</td></tr></tbody>
+      <tbody id="t3b"><tr><td colspan="12" style="text-align:center;padding:32px;color:var(--t3)">暂无数据</td></tr></tbody>
     </table>
   </div>
 </div>
 
-<!-- ══ TAB 4: 汇总分析 ══ -->
-<div class="panel" id="t4">
-  <div class="sh"><div class="st">汇总分析</div><div class="ss">月度趋势</div></div>
-  <div class="tw" style="margin-bottom:20px">
+<!-- ══ TAB4: 汇总分析 ══ -->
+<div class="pnl" id="t4">
+  <div class="sh"><div class="st">汇总分析</div></div>
+  <div class="tw" style="margin-bottom:18px">
     <table id="t4mt">
       <thead><tr>
         <th>月份</th><th>门店</th>
-        <th class="num">Statement总额</th><th class="num">本月新增金额</th>
+        <th class="num">Statement总额</th><th class="num">本月新增</th>
         <th class="num">已付</th><th class="num">期末余额</th>
         <th class="num">发票数</th><th class="num">新增张数</th><th class="num">逾期数</th>
       </tr></thead>
-      <tbody id="t4b"><tr><td colspan="9" style="text-align:center;padding:36px;color:var(--t3)">暂无数据</td></tr></tbody>
+      <tbody id="t4b"><tr><td colspan="9" style="text-align:center;padding:32px;color:var(--t3)">暂无数据</td></tr></tbody>
     </table>
   </div>
-  <div style="font-family:var(--hd);font-size:15px;font-weight:700;margin-bottom:12px">对账号付款记录</div>
+  <div style="font-family:var(--hd);font-size:15px;font-weight:700;margin-bottom:10px">对账号付款记录</div>
   <div id="t4rc"></div>
 </div>
 
 <!-- UPLOAD MODAL -->
-<div class="mo" id="upModal">
+<div class="mo" id="upMo">
   <div class="md">
     <div class="mdt">导入Statement PDF</div>
-    <div class="ig" style="margin-bottom:14px">
-      <div class="il">Statement月份</div>
-      <input type="month" class="inp" id="impMonth" style="width:180px">
+    <div style="margin-bottom:12px">
+      <div style="font-size:12px;font-weight:600;color:var(--t2);margin-bottom:4px">Statement月份</div>
+      <input type="month" class="inp" id="impM" style="width:180px">
     </div>
-    <div class="uz" id="pdfZone" onclick="document.getElementById('pdfFile').click()"
+    <div class="uz" id="pdfZ" onclick="document.getElementById('pdfF').click()"
       ondragover="event.preventDefault();this.classList.add('drag')"
       ondragleave="this.classList.remove('drag')"
-      ondrop="event.preventDefault();this.classList.remove('drag');S.pdfFile=event.dataTransfer.files[0];document.getElementById('pdfNm').textContent=S.pdfFile.name;this.classList.add('loaded')">
-      <div style="font-size:28px;margin-bottom:6px">📄</div>
-      <div style="font-size:14px;color:var(--t2)"><strong>点击上传</strong> Statement PDF</div>
-      <div style="font-size:12px;color:var(--t3);margin-top:4px" id="pdfNm">或拖拽到此处</div>
+      ondrop="event.preventDefault();this.classList.remove('drag');S.pdf=event.dataTransfer.files[0];document.getElementById('pdfNm').textContent=S.pdf.name;this.classList.add('ok')">
+      <div style="font-size:26px;margin-bottom:5px">📄</div>
+      <div style="font-size:13px;color:var(--t2)"><strong>点击上传</strong> Statement PDF</div>
+      <div style="font-size:11px;color:var(--t3);margin-top:3px" id="pdfNm">或拖拽到此处</div>
     </div>
-    <input type="file" id="pdfFile" accept=".pdf" style="display:none"
-      onchange="S.pdfFile=this.files[0];document.getElementById('pdfNm').textContent=this.files[0].name;document.getElementById('pdfZone').classList.add('loaded')">
+    <input type="file" id="pdfF" accept=".pdf" style="display:none"
+      onchange="S.pdf=this.files[0];document.getElementById('pdfNm').textContent=this.files[0].name;document.getElementById('pdfZ').classList.add('ok')">
     <div class="mdf">
-      <button class="btn bs" onclick="closeM('upModal')">取消</button>
-      <button class="btn bp" onclick="startImport()">开始解析导入</button>
-    </div>
-  </div>
-</div>
-
-<!-- PASTE MODAL -->
-<div class="mo" id="pasteModal">
-  <div class="md" style="width:640px">
-    <div class="mdt" id="pasteMdT">粘贴数据</div>
-    <div id="pasteDesc" style="font-size:12px;color:var(--t3);margin-bottom:10px;font-family:var(--mn)"></div>
-    <textarea class="paste-area" id="pasteArea" placeholder="从Lark/Excel直接复制，粘贴到这里（包含表头行）..."></textarea>
-    <div class="paste-hint" id="pasteHint"></div>
-    <div class="mdf">
-      <button class="btn bs" onclick="closeM('pasteModal')">取消</button>
-      <button class="btn bp" onclick="processPaste()">导入数据</button>
+      <button class="btn bs" onclick="closeM('upMo')">取消</button>
+      <button class="btn bp" onclick="doImport()">开始解析导入</button>
     </div>
   </div>
 </div>
 
 <!-- ADD RECON MODAL -->
-<div class="mo" id="reconModal">
+<div class="mo" id="reconMo">
   <div class="md">
     <div class="mdt">新增对账号付款记录</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-      <div class="ig"><div class="il">对账号</div><input class="inp" id="rNo" placeholder="如 S2604-D"></div>
-      <div class="ig"><div class="il">付款金额</div><input class="inp" type="number" id="rAmt" placeholder="0.00"></div>
-      <div class="ig"><div class="il">付款日期</div><input class="inp" type="date" id="rDate"></div>
-      <div class="ig"><div class="il">付款方式</div>
-        <select class="inp" id="rMeth"><option value="直接支付">直接支付</option><option value="贷款">贷款</option></select>
-      </div>
-      <div class="ig" style="grid-column:span 2"><div class="il">备注/关联PO</div><input class="inp" id="rNote" placeholder="可选"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div><div style="font-size:12px;font-weight:600;color:var(--t2);margin-bottom:3px">对账号</div><input class="inp" id="rNo" placeholder="如 S2604-D"></div>
+      <div><div style="font-size:12px;font-weight:600;color:var(--t2);margin-bottom:3px">付款金额</div><input class="inp" type="number" id="rAmt" placeholder="0.00"></div>
+      <div><div style="font-size:12px;font-weight:600;color:var(--t2);margin-bottom:3px">付款日期</div><input class="inp" type="date" id="rDate"></div>
+      <div><div style="font-size:12px;font-weight:600;color:var(--t2);margin-bottom:3px">付款方式</div>
+        <select class="inp" id="rMeth"><option value="直接支付">直接支付</option><option value="贷款">贷款</option></select></div>
+      <div style="grid-column:span 2"><div style="font-size:12px;font-weight:600;color:var(--t2);margin-bottom:3px">备注</div><input class="inp" id="rNote" placeholder="可选"></div>
     </div>
     <div class="mdf">
-      <button class="btn bs" onclick="closeM('reconModal')">取消</button>
+      <button class="btn bs" onclick="closeM('reconMo')">取消</button>
       <button class="btn bp" onclick="saveRecon()">保存</button>
     </div>
   </div>
 </div>
 
+<!-- PO DETAIL MODAL -->
+<div class="mo" id="poMo">
+  <div class="md md-wide">
+    <div class="mdt" id="poMoT">PO详情</div>
+    <div id="poMoB"></div>
+    <div class="mdf"><button class="btn bs" onclick="closeM('poMo')">关闭</button></div>
+  </div>
+</div>
+
 <script>
-const SU = 'https://wcracwoxlrpajxrhrilb.supabase.co';
-const SK = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndjcmFjd294bHJwYWp4cmhyaWxiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk0MTY0ODcsImV4cCI6MjA5NDk5MjQ4N30.ipxNNsAH5qxcGEmckHLYtn43A57HDft7j3WIym31oGk';
+const SU='https://wcracwoxlrpajxrhrilb.supabase.co', SK='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndjcmFjd294bHJwYWp4cmhyaWxiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk0MTY0ODcsImV4cCI6MjA5NDk5MjQ4N30.ipxNNsAH5qxcGEmckHLYtn43A57HDft7j3WIym31oGk';
 
-async function api(method, table, body, params='') {
-  const r = await fetch(`${SU}/rest/v1/${table}${params}`, {
+async function api(method,table,body,params=''){
+  const r=await fetch(`${SU}/rest/v1/${table}${params}`,{
     method,
-    headers: {
-      'Content-Type': 'application/json',
-      'apikey': SK,
-      'Authorization': `Bearer ${SK}`,
-      'Prefer': method === 'POST' ? 'return=representation' : (method === 'PATCH' ? 'return=representation' : ''),
-    },
-    body: body ? JSON.stringify(body) : null,
+    headers:{'Content-Type':'application/json','apikey':SK,'Authorization':`Bearer ${SK}`,'Prefer':method==='POST'?'return=representation':''},
+    body:body?JSON.stringify(body):null
   });
-  if (!r.ok) throw new Error(await r.text());
-  if (method === 'DELETE') return null;
-  const text = await r.text();
-  return text ? JSON.parse(text) : null;
+  if(!r.ok)throw new Error(await r.text());
+  const t=await r.text();
+  return t?JSON.parse(t):null;
 }
 
-const S = {
-  store: '悉尼', month: '',
-  invoices: [], vins: [], recons: [], stmts: [],
-  pdfFile: null, pasteType: '',
-  sort: { col: 'invoice_date', dir: 1 },
-};
+const S={store:'悉尼',month:'',invoices:[],vins:[],recons:[],pdf:null,sort:{col:'invoice_date',dir:1},f1:{q:'',st:'',pay:''},f2:{q:'',st:'',pr:''}};
+const fmt=n=>n==null?'—':Number(n).toLocaleString('en-AU',{minimumFractionDigits:2,maximumFractionDigits:2});
+const r2=n=>Math.round(n*100)/100;
+const today=()=>new Date().toISOString().split('T')[0];
 
-const fmt = n => n == null ? '—' : Number(n).toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const r2 = n => Math.round(n * 100) / 100;
-const today = () => new Date().toISOString().split('T')[0];
+function showL(t='处理中...'){document.getElementById('lov').classList.add('on');document.getElementById('lt').textContent=t}
+function hideL(){document.getElementById('lov').classList.remove('on')}
 
-function showL(t = '处理中...') { document.getElementById('lov').classList.add('show'); document.getElementById('lt').textContent = t; }
-function hideL() { document.getElementById('lov').classList.remove('show'); }
-
-function toast(msg, type = 'ok', dur = 3500) {
-  const w = document.getElementById('tw2');
-  const d = document.createElement('div');
-  d.className = `toast t${type}`;
-  d.textContent = msg;
-  w.appendChild(d);
-  setTimeout(() => d.remove(), dur);
+function toast(msg,type='ok',dur=3500){
+  const w=document.getElementById('tw3'),d=document.createElement('div');
+  d.className=`tst t${type}`;d.textContent=msg;w.appendChild(d);
+  setTimeout(()=>d.remove(),dur);
 }
 
-function sw(id, btn) {
-  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
-  document.getElementById(id).classList.add('active');
-  btn.classList.add('active');
-  if (id === 't2') renderT2();
-  if (id === 't3') renderT3();
-  if (id === 't4') renderT4();
+function sw(id,btn){
+  document.querySelectorAll('.pnl').forEach(p=>p.classList.remove('on'));
+  document.querySelectorAll('.tab').forEach(b=>b.classList.remove('on'));
+  document.getElementById(id).classList.add('on');
+  btn.classList.add('on');
+  if(id==='t2')renderT2();
+  if(id==='t3')renderT3();
+  if(id==='t4')renderT4();
 }
 
-function setStore(s, btn) {
-  S.store = s;
-  document.querySelectorAll('.sbtn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
+function setSt(s,btn){
+  S.store=s;
+  document.querySelectorAll('.sb').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
   loadData();
 }
 
-function closeM(id) { document.getElementById(id).classList.remove('show'); }
-function showUpload() {
-  document.getElementById('impMonth').value = new Date().toISOString().slice(0, 7);
-  S.pdfFile = null;
-  document.getElementById('pdfNm').textContent = '或拖拽到此处';
-  document.getElementById('pdfZone').className = 'uz';
-  document.getElementById('upModal').classList.add('show');
+function closeM(id){document.getElementById(id).classList.remove('on')}
+function showUp(){
+  document.getElementById('impM').value=new Date().toISOString().slice(0,7);
+  S.pdf=null;
+  document.getElementById('pdfNm').textContent='或拖拽到此处';
+  document.getElementById('pdfZ').className='uz';
+  document.getElementById('upMo').classList.add('on');
 }
-function showAddRecon() {
-  document.getElementById('rDate').value = today();
-  document.getElementById('reconModal').classList.add('show');
-}
-
-// ── PASTE MODAL ──
-function showPasteModal(type) {
-  S.pasteType = type;
-  document.getElementById('pasteArea').value = '';
-  const cfg = {
-    purchase: {
-      title: '粘贴采购录入表',
-      desc: '从Lark多维表格复制数据，粘贴到下方（含表头行）',
-      hint: '需要包含列：合同号、DJJ Code / 发票号、价格/Price、车架号、适配机型/规格（可选）',
-    },
-    sales: {
-      title: '粘贴销售明细表',
-      desc: '从Lark/Excel复制销售数据，粘贴到下方（含表头行）',
-      hint: '需要包含列：车架号、唯一销售单号、不含税销售价/Total Amount not including GST、出库状态',
-    },
-    biz: {
-      title: '粘贴合同商务表',
-      desc: '从Excel复制商务表数据，粘贴到下方（含表头行）',
-      hint: '需要包含列：合同号、合同总金额、已付金额1、已付日期1、对账号1、已付金额2、已付日期2、对账号2...（最多4次）',
-    },
-  };
-  const c = cfg[type] || {};
-  document.getElementById('pasteMdT').textContent = c.title || '粘贴数据';
-  document.getElementById('pasteDesc').textContent = c.desc || '';
-  document.getElementById('pasteHint').textContent = c.hint || '';
-  document.getElementById('pasteModal').classList.add('show');
+function showAddRecon(){
+  document.getElementById('rDate').value=today();
+  document.getElementById('reconMo').classList.add('on');
 }
 
-// ── PARSE PASTE ──
-function parseTSV(text) {
-  const lines = text.trim().split(/\r?\n/).filter(l => l.trim());
-  if (lines.length < 2) return [];
-  const headers = lines[0].split("\t").map(h => h.trim().replace(/\r/g, ""));
-  return lines.slice(1).map(line => {
-    const cells = line.split("\t").map(c => c.trim().replace(/\r/g, ""));
-    const obj = {};
-    headers.forEach((h, i) => { obj[h] = cells[i] || ""; });
-    return obj;
-  });
-}
+// ── PDF PARSE ──
+pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-async function processPaste() {
-  const text = document.getElementById('pasteArea').value.trim();
-  if (!text) { toast('请先粘贴数据', 'wn'); return; }
-  closeM('pasteModal');
-  showL('处理数据...');
-  try {
-    const rows = parseTSV(text);
-    if (!rows.length) throw new Error('未能解析到数据，请确认是否包含表头行');
-    if (S.pasteType === 'purchase') await importPurchaseRows(rows);
-    else if (S.pasteType === 'sales') await importSalesRows(rows);
-    else if (S.pasteType === 'biz') await importBizRows(rows);
-    hideL();
-    await loadData();
-  } catch (e) {
-    hideL();
-    toast('导入失败: ' + e.message, 'er');
-    console.error(e);
+async function pdfTxt(file){
+  const ab=await file.arrayBuffer();
+  const pdf=await pdfjsLib.getDocument({data:ab}).promise;
+  let txt='';
+  for(let i=1;i<=pdf.numPages;i++){
+    const pg=await pdf.getPage(i);
+    const ct=await pg.getTextContent();
+    txt+=ct.items.map(x=>x.str).join(' ')+'\n';
   }
+  return txt;
 }
 
-// ── IMPORT PURCHASE ──
-async function importPurchaseRows(rows) {
-  if (!rows.length) return;
-  const keys = Object.keys(rows[0]);
-  const vinCol = keys.find(k => k.includes('车架号')) || '';
-  const priceCol = keys.find(k => k === 'Price' || k === '价格' || k.includes('Price')) || '';
-  const cnCol = keys.find(k => k.includes('合同号')) || '';
-  const codeCol = keys.find(k => k.includes('DJJ') || k.includes('Code') || k.includes('发票号')) || '';
-  const modelCol = keys.find(k => k.includes('适配机型') || k.includes('规格') || k.includes('型号')) || '';
-
-  let count = 0;
-  for (const row of rows) {
-    const vin = (row[vinCol] || '').trim();
-    if (!vin) continue;
-    const price = parseFloat((row[priceCol] || '0').replace(/[$,]/g, '')) || 0;
-    const gst = r2(price * 0.1);
-    const invNo = (row[codeCol] || '').trim();
-    const po = (row[cnCol] || '').trim();
-
-    // Find invoice_id if we have invoice no
-    let invId = null;
-    if (invNo) {
-      const inv = S.invoices.find(r => r.invoice_no === invNo || r.invoice_no.includes(invNo));
-      if (inv) invId = inv.id;
-    }
-
-    const vinData = {
-      store: S.store, vin,
-      invoice_no: invNo || null,
-      invoice_id: invId,
-      purchase_price_ex: price || null,
-      purchase_gst: price ? gst : null,
-      purchase_total: price ? r2(price + gst) : null,
-      gst_rate: 10,
-      purchase_po: po || null,
-      model: (row[modelCol] || '').trim() || null,
-    };
-
-    try {
-      const ex = await api('GET', 'vin_details', null, `?vin=eq.${vin}&store=eq.${S.store}`);
-      if (ex && ex.length) {
-        await api('PATCH', 'vin_details', vinData, `?vin=eq.${vin}&store=eq.${S.store}`);
-      } else {
-        await api('POST', 'vin_details', [vinData]);
-      }
-      count++;
-    } catch (e) { console.error('VIN err', vin, e); }
-  }
-  toast(`采购录入表导入完成：${count} 条VIN`, 'ok');
-}
-
-// ── IMPORT SALES ──
-async function importSalesRows(rows) {
-  if (!rows.length) return;
-  const keys = Object.keys(rows[0]);
-  const vinCol = keys.find(k => k.includes('车架号')) || '';
-  const invCol = keys.find(k => k.includes('唯一销售单号') || k.includes('销售单号')) || '';
-  const priceCol = keys.find(k => k.includes('not including GST') || k.includes('不含税')) || '';
-  const statusCol = keys.find(k => k.includes('出库状态') || k.includes('状态')) || '';
-
-  let count = 0;
-  for (const row of rows) {
-    const vin = (row[vinCol] || '').trim();
-    if (!vin) continue;
-    const saleEx = parseFloat((row[priceCol] || '0').replace(/[$,]/g, '')) || 0;
-    const status = (row[statusCol] || '').trim();
-    const saleInv = (row[invCol] || '').trim();
-
-    const updates = {
-      sale_inv_no: saleInv || null,
-      sale_price_ex: saleEx || null,
-      sale_status: status.includes('已出库') ? '全款' : status.includes('未出库') ? '未售' : (status || null),
-    };
-
-    // Recalc profit
-    const vr = S.vins.find(r => r.vin === vin);
-    if (vr && saleEx && vr.purchase_price_ex) {
-      updates.gross_profit = r2(saleEx - Number(vr.purchase_price_ex));
-      updates.gross_profit_rate = saleEx > 0 ? Math.round(updates.gross_profit / saleEx * 100) : 0;
-    }
-
-    try {
-      const ex = await api('GET', 'vin_details', null, `?vin=eq.${vin}&store=eq.${S.store}`);
-      if (ex && ex.length) {
-        await api('PATCH', 'vin_details', updates, `?vin=eq.${vin}&store=eq.${S.store}`);
-        count++;
-      }
-    } catch (e) { console.error(e); }
-  }
-  toast(`销售明细导入完成：${count} 条`, 'ok');
-}
-
-// ── IMPORT BIZ ──
-async function importBizRows(rows) {
-  if (!rows.length) return;
-  const keys = Object.keys(rows[0]);
-  const poCol = keys.find(k => k.includes('合同号') && !k.includes('已付')) || keys[0];
-  const totCol = keys.find(k => k.includes('合同总金额') || k.includes('总金额')) || '';
-  const p = n => parseFloat((n || '0').toString().replace(/[$,]/g, '')) || 0;
-
-  let count = 0;
-  for (const row of rows) {
-    const po = (row[poCol] || '').trim();
-    if (!po) continue;
-    const total = p(row[totCol]);
-
-    // Build paid records (up to 4)
-    const paid = [];
-    for (let i = 1; i <= 4; i++) {
-      const amtCol = keys.find(k => k.includes(`已付金额${i}`) || k.includes(`已付${i}`) || k === `已付金额${i}`) || '';
-      const dateCol = keys.find(k => k.includes(`已付日期${i}`) || k === `已付日期${i}`) || '';
-      const rnoCol = keys.find(k => k.includes(`对账号${i}`) || k === `对账号${i}`) || '';
-      const amt = amtCol ? p(row[amtCol]) : 0;
-      if (amt > 0) paid.push({
-        amount: amt,
-        date: dateCol ? (row[dateCol] || '').trim() : '',
-        recon_no: rnoCol ? (row[rnoCol] || '').trim() : '',
-      });
-    }
-
-    const bizData = {
-      store: S.store, po_no: po,
-      contract_total: total || null,
-      paid1_amount: paid[0] ? paid[0].amount : null,
-      paid1_date: paid[0] ? paid[0].date || null : null,
-      paid1_recon: paid[0] ? paid[0].recon_no || null : null,
-      paid2_amount: paid[1] ? paid[1].amount : null,
-      paid2_date: paid[1] ? paid[1].date || null : null,
-      paid2_recon: paid[1] ? paid[1].recon_no || null : null,
-      paid3_amount: paid[2] ? paid[2].amount : null,
-      paid3_date: paid[2] ? paid[2].date || null : null,
-      paid3_recon: paid[2] ? paid[2].recon_no || null : null,
-      paid4_amount: paid[3] ? paid[3].amount : null,
-      paid4_date: paid[3] ? paid[3].date || null : null,
-      paid4_recon: paid[3] ? paid[3].recon_no || null : null,
-    };
-
-    try {
-      const ex = await api('GET', 'biz_contracts', null, `?po_no=eq.${po}&store=eq.${S.store}`);
-      if (ex && ex.length) {
-        await api('PATCH', 'biz_contracts', bizData, `?po_no=eq.${po}&store=eq.${S.store}`);
-      } else {
-        await api('POST', 'biz_contracts', [bizData]);
-      }
-      count++;
-    } catch (e) { console.error('biz err', po, e); }
-  }
-  toast(`商务表导入完成：${count} 条PO`, 'ok');
-}
-
-// ── PDF PARSER ──
-pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-
-async function pdfToText(file) {
-  const ab = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({ data: ab }).promise;
-  let text = '';
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i);
-    const content = await page.getTextContent();
-    text += content.items.map(x => x.str).join(" ") + "\n";
-
-  }
-  return text;
-}
-
-function parseStmt(text, month) {
-  let store = S.store;
-  const head = text.substring(0, 500);
-  if (/DJJ\s*Brisbane|MEADOWBROOK/i.test(head)) store = '布里斯班';
-  else if (/DJJ\s*Perth|BAYSWATER/i.test(head)) store = '珀斯';
-  else store = '悉尼';
-
-  const rows = [];
-  const invRe = /Invoice\s*#\s*((?:DJJ|INV)-[\w-]+)/gi;
-  const invMatches = [];
-  let m;
-  while ((m = invRe.exec(text)) !== null) invMatches.push({ no: m[1], pos: m.index });
-
-  for (let i = 0; i < invMatches.length; i++) {
-    const inv = invMatches[i];
-    const seg = text.substring(inv.pos, i + 1 < invMatches.length ? invMatches[i + 1].pos : text.length);
-    const nums = [];
-    const nr = /([\d,]+\.\d{2})/g;
-    let nm;
-    while ((nm = nr.exec(seg)) !== null && nums.length < 4) nums.push(parseFloat(nm[1].replace(/,/g, '')));
-
-    const dateRe = /(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4})/gi;
-    const dates = seg.match(dateRe) || [];
-    const refM = seg.match(/(?:CS\/)?(?:PO[-\s]?[\w/]+)/i);
-
-    if (nums.length >= 3) {
-      const invDate = dates[0] || '';
-      rows.push({
-        store, statement_month: month,
-        invoice_no: inv.no,
-        invoice_date: invDate,
-        due_date: dates[1] || dates[0] || '',
-        reference: refM ? refM[0].trim() : '',
-        invoice_amount: nums[0] || 0,
-        payments: nums[1] || 0,
-        balance_aud: nums[2] || 0,
-        month_category: getCat(invDate, month),
-      });
+function parseStmt(txt,month){
+  let store=S.store;
+  const h=txt.substring(0,500);
+  if(/DJJ\s*Brisbane|MEADOWBROOK/i.test(h))store='布里斯班';
+  else if(/DJJ\s*Perth|BAYSWATER/i.test(h))store='珀斯';
+  else store='悉尼';
+  const rows=[],re=/Invoice\s*#\s*((?:DJJ|INV)-[\w-]+)/gi;
+  const ms=[];let m;
+  while((m=re.exec(txt))!==null)ms.push({no:m[1],pos:m.index});
+  for(let i=0;i<ms.length;i++){
+    const inv=ms[i];
+    const seg=txt.substring(inv.pos,i+1<ms.length?ms[i+1].pos:txt.length);
+    const nums=[];const nr=/([\d,]+\.\d{2})/g;let nm;
+    while((nm=nr.exec(seg))!==null&&nums.length<4)nums.push(parseFloat(nm[1].replace(/,/g,'')));
+    const dr=/(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4})/gi;
+    const dates=seg.match(dr)||[];
+    const rf=seg.match(/(?:CS\/)?(?:PO[-\s]?[\w/]+)/i);
+    if(nums.length>=3){
+      rows.push({store,statement_month:month,invoice_no:inv.no,
+        invoice_date:dates[0]||'',due_date:dates[1]||dates[0]||'',
+        reference:rf?rf[0].trim():'',
+        invoice_amount:nums[0]||0,payments:nums[1]||0,balance_aud:nums[2]||0,
+        month_category:getCat(dates[0]||'',month)});
     }
   }
   return rows;
 }
 
-function getCat(dateStr, stmtMonth) {
-  if (!dateStr) return 'unknown';
-  const mo = { Jan: '01', Feb: '02', Mar: '03', Apr: '04', May: '05', Jun: '06', Jul: '07', Aug: '08', Sep: '09', Oct: '10', Nov: '11', Dec: '12' };
-  const m2 = dateStr.match(/(\d{1,2})\s+(\w+)\s+(\d{4})/);
-  if (!m2) return 'unknown';
-  const ym = `${m2[3]}-${mo[m2[2]] || '01'}`;
-  if (ym === stmtMonth) return 'new';
-  const [sy, sm] = stmtMonth.split('-').map(Number);
-  const [iy, im] = ym.split('-').map(Number);
-  const diff = (sy - iy) * 12 + (sm - im);
-  return diff === 1 ? 'carry' : diff > 1 ? 'earlier' : 'new';
+function getCat(d,sm){
+  if(!d)return'unknown';
+  const mo={Jan:'01',Feb:'02',Mar:'03',Apr:'04',May:'05',Jun:'06',Jul:'07',Aug:'08',Sep:'09',Oct:'10',Nov:'11',Dec:'12'};
+  const m=d.match(/(\d{1,2})\s+(\w+)\s+(\d{4})/);
+  if(!m)return'unknown';
+  const ym=`${m[3]}-${mo[m[2]]||'01'}`;
+  if(ym===sm)return'new';
+  const[sy,smn]=sm.split('-').map(Number),[iy,im]=ym.split('-').map(Number);
+  const diff=(sy-iy)*12+(smn-im);
+  return diff===1?'carry':diff>1?'earlier':'new';
 }
 
-function parseDue(s) {
-  if (!s) return null;
-  const mo = { Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5, Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11 };
-  const m = s.match(/(\d{1,2})\s+(\w+)\s+(\d{4})/);
-  if (!m) return null;
-  return new Date(+m[3], mo[m[2]] || 0, +m[1]);
+function parseDue(s){
+  if(!s)return null;
+  const mo={Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
+  const m=s.match(/(\d{1,2})\s+(\w+)\s+(\d{4})/);
+  if(!m)return null;
+  return new Date(+m[3],mo[m[2]]||0,+m[1]);
 }
 
-// ── IMPORT ──
-async function startImport() {
-  const month = document.getElementById('impMonth').value;
-  if (!month) { toast('请选择月份', 'wn'); return; }
-  if (!S.pdfFile) { toast('请上传PDF', 'wn'); return; }
-  closeM('upModal');
-  showL('解析PDF...');
-  try {
-    const text = await pdfToText(S.pdfFile);
-    showL('解析发票数据...');
-    const parsed = parseStmt(text, month);
-    if (!parsed.length) { hideL(); toast('未解析到发票，请检查PDF格式', 'er'); return; }
-
-    showL(`找到 ${parsed.length} 张发票，保存中...`);
-    const existing = await api('GET', 'invoices', null, `?store=eq.${S.store}&statement_month=eq.${month}&select=invoice_no,balance_aud,id`);
-    const exMap = Object.fromEntries((existing || []).map(e => [e.invoice_no, e]));
-
-    const newOnes = [], changed = [];
-    for (const r of parsed) {
-      if (exMap[r.invoice_no]) {
-        if (Math.abs(exMap[r.invoice_no].balance_aud - r.balance_aud) > 0.01) changed.push({ ...r, old: exMap[r.invoice_no].balance_aud });
-      } else {
-        newOnes.push(r);
-      }
-    }
-
-    // Upsert all
-    for (const inv of parsed) {
-      try {
-        if (exMap[inv.invoice_no]) {
-          await api('PATCH', 'invoices', { balance_aud: inv.balance_aud, invoice_amount: inv.invoice_amount, payments: inv.payments, month_category: inv.month_category },
-            `?invoice_no=eq.${inv.invoice_no}&store=eq.${S.store}`);
-        } else {
-          await api('POST', 'invoices', [inv]);
+async function doImport(){
+  const month=document.getElementById('impM').value;
+  if(!month){toast('请选择月份','wn');return}
+  if(!S.pdf){toast('请上传PDF','wn');return}
+  closeM('upMo');showL('解析PDF...');
+  try{
+    const txt=await pdfTxt(S.pdf);
+    showL('解析发票...');
+    const parsed=parseStmt(txt,month);
+    if(!parsed.length){hideL();toast('未解析到发票，请检查PDF格式','er');return}
+    showL(`找到${parsed.length}张发票，保存中...`);
+    const ex=await api('GET','invoices',null,`?store=eq.${S.store}&statement_month=eq.${month}&select=invoice_no,balance_aud`)||[];
+    const exMap=Object.fromEntries(ex.map(e=>[e.invoice_no,e]));
+    let newC=0,upC=0;
+    for(const inv of parsed){
+      try{
+        if(exMap[inv.invoice_no]){
+          if(Math.abs(exMap[inv.invoice_no].balance_aud-inv.balance_aud)>0.01){
+            await api('PATCH','invoices',{balance_aud:inv.balance_aud,invoice_amount:inv.invoice_amount,payments:inv.payments,month_category:inv.month_category},`?invoice_no=eq.${inv.invoice_no}&store=eq.${S.store}`);
+            upC++;
+          }
+        }else{
+          await api('POST','invoices',[inv]);
+          newC++;
         }
-      } catch (e) { console.error(e); }
+      }catch(e){console.error(e)}
     }
-
     hideL();
-    let msg = `导入完成：${parsed.length} 张发票`;
-    if (newOnes.length) msg += ` · ${newOnes.length} 张新增`;
-    if (changed.length) msg += ` · ${changed.length} 张余额已更新`;
-    toast(msg, 'ok', 5000);
+    toast(`导入完成：${parsed.length}张 · ${newC}新增 · ${upC}更新`,'ok',5000);
     await loadData();
-  } catch (e) {
-    hideL();
-    toast('导入失败: ' + e.message, 'er');
-    console.error(e);
-  }
+  }catch(e){hideL();toast('导入失败: '+e.message,'er');console.error(e)}
 }
 
-// ── LOAD DATA ──
-async function loadData() {
+// ── LOAD ──
+async function loadData(){
   showL('加载数据...');
-  try {
-    S.invoices = await api('GET', 'invoices', null, `?store=eq.${S.store}&order=invoice_date.desc,invoice_no.asc`) || [];
-    S.vins = await api('GET', 'vin_details', null, `?store=eq.${S.store}&order=invoice_no.asc`) || [];
-    S.recons = await api('GET', 'recon_payments', null, `?store=eq.${S.store}&order=payment_date.desc`) || [];
-
-    // Try loading biz contracts (table might not exist yet)
-    try {
-      S.biz = await api('GET', 'biz_contracts', null, `?store=eq.${S.store}&order=po_no.asc`) || [];
-    } catch (e) { S.biz = []; }
-
-    const months = [...new Set(S.invoices.map(r => r.statement_month))].sort().reverse();
-    if (!S.month && months.length) S.month = months[0];
-
-    renderMonthChips(months);
-    updStats();
-    renderT1();
-    hideL();
-  } catch (e) {
-    hideL();
-    toast('加载失败: ' + e.message, 'er');
-    console.error(e);
-  }
+  try{
+    S.invoices=await api('GET','invoices',null,`?store=eq.${S.store}&order=invoice_date.desc,invoice_no.asc`)||[];
+    S.vins=await api('GET','vin_details',null,`?store=eq.${S.store}&order=invoice_no.asc,vin.asc`)||[];
+    S.recons=await api('GET','recon_payments',null,`?store=eq.${S.store}&order=payment_date.desc`)||[];
+    const months=[...new Set(S.invoices.map(r=>r.statement_month))].sort().reverse();
+    if(!S.month&&months.length)S.month=months[0];
+    renderMC(months);updStats();renderT1();hideL();
+  }catch(e){hideL();toast('加载失败: '+e.message,'er');console.error(e)}
 }
 
-function renderMonthChips(months) {
-  document.getElementById('mchips').innerHTML = months.map(m =>
-    `<div class="mc ${m === S.month ? 'active' : ''}" onclick="setMonth('${m}',this)">${m}</div>`
-  ).join('') || '<span style="color:var(--t3);font-size:12px">暂无数据</span>';
+function renderMC(months){
+  document.getElementById('mcs').innerHTML=months.map(m=>
+    `<div class="mc ${m===S.month?'on':''}" onclick="setM('${m}',this)">${m}</div>`
+  ).join('')||'<span style="color:var(--t3);font-size:12px">暂无数据</span>';
 }
 
-function setMonth(m, el) {
-  S.month = m;
-  document.querySelectorAll('.mc').forEach(c => c.classList.remove('active'));
-  el.classList.add('active');
-  updStats();
-  renderT1();
+function setM(m,el){
+  S.month=m;
+  document.querySelectorAll('.mc').forEach(c=>c.classList.remove('on'));
+  el.classList.add('on');
+  updStats();renderT1();
 }
 
-function updStats() {
-  const cur = S.invoices.filter(r => r.statement_month === S.month && !r.ignored);
-  const total = cur.reduce((s, r) => s + Number(r.balance_aud), 0);
-  const now = new Date();
-  const ov = cur.filter(r => { const d = parseDue(r.due_date); return d && d < now && r.balance_aud > 0; });
-  document.getElementById('s1').textContent = fmt(total);
-  document.getElementById('s2').textContent = ov.length + '张';
-  document.getElementById('s3').textContent = cur.length + '张';
-  document.getElementById('s4').textContent = cur.filter(r => r.month_category === 'new').length + '张';
-  document.getElementById('s5').textContent = cur.filter(r => r.month_category === 'carry').length + '张';
+function updStats(){
+  const cur=S.invoices.filter(r=>r.statement_month===S.month&&!r.ignored);
+  const total=cur.reduce((s,r)=>s+Number(r.balance_aud),0);
+  const now=new Date();
+  const ov=cur.filter(r=>{const d=parseDue(r.due_date);return d&&d<now&&r.balance_aud>0});
+  document.getElementById('s1').textContent=fmt(total);
+  document.getElementById('s2').textContent=ov.length+'张';
+  document.getElementById('s3').textContent=cur.length+'张';
+  document.getElementById('s4').textContent=cur.filter(r=>r.month_category==='new').length+'张';
+  document.getElementById('s5').textContent=cur.filter(r=>r.month_category==='carry').length+'张';
 }
 
 // ── RENDER T1 ──
-let t1Filter = { q: '', status: '', payment: '' };
-function ft1(v) { t1Filter.q = v; renderT1(); }
-function ft1s(v) { t1Filter.status = v; renderT1(); }
-function ft1p(v) { t1Filter.payment = v; renderT1(); }
+function ft1q(v){S.f1.q=v;renderT1()}
+function ft1s(v){S.f1.st=v;renderT1()}
+function ft1p(v){S.f1.pay=v;renderT1()}
 
-function renderT1() {
-  let rows = S.invoices.filter(r => r.statement_month === S.month);
-  const { q, status, payment } = t1Filter;
-  if (q) { const lq = q.toLowerCase(); rows = rows.filter(r => (r.invoice_no || '').toLowerCase().includes(lq) || (r.reference || '').toLowerCase().includes(lq) || (r.recon_no || '').toLowerCase().includes(lq)); }
-  if (status) rows = rows.filter(r => r.month_category === status);
-  if (payment) rows = rows.filter(r => r.payment_method === payment);
-  rows = [...rows].sort((a, b) => { const va = a[S.sort.col] || '', vb = b[S.sort.col] || ''; return va < vb ? -S.sort.dir : va > vb ? S.sort.dir : 0; });
+function renderT1(){
+  let rows=S.invoices.filter(r=>r.statement_month===S.month);
+  const{q,st,pay}=S.f1;
+  if(q){const lq=q.toLowerCase();rows=rows.filter(r=>(r.invoice_no||'').toLowerCase().includes(lq)||(r.reference||'').toLowerCase().includes(lq)||(r.recon_no||'').toLowerCase().includes(lq))}
+  if(st)rows=rows.filter(r=>r.month_category===st);
+  if(pay)rows=rows.filter(r=>r.payment_method===pay);
+  rows=[...rows].sort((a,b)=>{const va=a[S.sort.col]||'',vb=b[S.sort.col]||'';return va<vb?-S.sort.dir:va>vb?S.sort.dir:0});
+  const now=new Date();
+  const cat={new:'<span class="bd b-ok">本月新增</span>',carry:'<span class="bd b-wn">上月延续</span>',earlier:'<span class="bd b-mu">更早未付</span>',unknown:'—'};
 
-  const now = new Date();
-  const catBadge = { new: '<span class="bd ok">本月新增</span>', carry: '<span class="bd wn">上月延续</span>', earlier: '<span class="bd mu">更早未付</span>', unknown: '—' };
-
-  document.getElementById('t1b').innerHTML = rows.length ? rows.map(r => {
-    const due = parseDue(r.due_date);
-    const isOv = due && due < now && r.balance_aud > 0;
-    const pmBadge = r.payment_method === '直接支付' ? '<span class="bd ok">直接支付</span>' : r.payment_method === '贷款' ? '<span class="bd ac">贷款</span>' : '';
-    const ctBadge = r.contract_type ? `<span class="bd mu">${r.contract_type}</span>` : '';
-    return `<tr class="${r.ignored ? 'ign' : ''} ${r.month_category === 'new' ? 'new-inv' : ''}">
-      <td class="mono" style="font-size:12px">${r.invoice_date || '—'}</td>
-      <td><span style="font-weight:600;color:var(--ac);font-family:var(--mn);font-size:12px">${r.invoice_no}</span>${isOv ? ' <span class="bd er">逾期</span>' : ''}</td>
-      <td class="ec mono" style="font-size:11px;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" onclick="editCellById('${r.id}','reference',this)">${r.reference || '<span style="color:var(--t3)">点击编辑</span>'}</td>
-      <td class="mono" style="font-size:12px;color:${isOv ? 'var(--er)' : 'var(--t2)'}">${r.due_date || '—'}</td>
+  document.getElementById('t1b').innerHTML=rows.length?rows.map(r=>{
+    const due=parseDue(r.due_date),isOv=due&&due<now&&r.balance_aud>0;
+    const pm=r.payment_method==='直接支付'?'<span class="bd b-ok">直接支付</span>':r.payment_method==='贷款'?'<span class="bd b-ac">贷款</span>':'';
+    const ct=r.contract_type?`<span class="bd b-mu">${r.contract_type}</span>`:'';
+    return`<tr class="${r.ignored?'ign':''} ${r.month_category==='new'?'ni':''}">
+      <td class="mono" style="font-size:12px">${r.invoice_date||'—'}</td>
+      <td><span style="font-weight:600;color:var(--ac);font-family:var(--mn);font-size:12px">${r.invoice_no}</span>${isOv?' <span class="bd b-er">逾期</span>':''}</td>
+      <td class="ec mono" style="font-size:11px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" onclick="ecText('${r.id}','reference',this,'invoices')">${r.reference||'<span style="color:var(--t3)">点击编辑</span>'}</td>
+      <td class="mono" style="font-size:12px;color:${isOv?'var(--er)':'var(--t2)'}">${r.due_date||'—'}</td>
       <td class="num">${fmt(r.invoice_amount)}</td>
-      <td class="num" style="color:var(--ok)">${r.payments > 0 ? fmt(r.payments) : '—'}</td>
+      <td class="num" style="color:var(--ok)">${r.payments>0?fmt(r.payments):'—'}</td>
       <td class="num" style="font-weight:700">${fmt(r.balance_aud)}</td>
-      <td>${catBadge[r.month_category] || '—'}</td>
-      <td class="ec" style="cursor:pointer;color:var(--wn);font-family:var(--mn);font-size:12px" onclick="editCellById('${r.id}','recon_no',this)">${r.recon_no || '<span style="color:var(--t3)">点击设置</span>'}</td>
-      <td class="ec" style="cursor:pointer" onclick="editSelectById('${r.id}','payment_method',this,['直接支付','贷款'])">${pmBadge || '<span style="color:var(--t3);font-size:12px">点击设置</span>'}</td>
-      <td class="ec" style="cursor:pointer" onclick="editSelectById('${r.id}','contract_type',this,['确认合同','自有'])">${ctBadge || '<span style="color:var(--t3);font-size:12px">点击设置</span>'}</td>
-      <td class="ec" style="cursor:pointer;font-family:var(--mn);font-size:12px" onclick="editCellById('${r.id}','payment_date',this)">${r.payment_date || '<span style="color:var(--t3)">点击设置</span>'}</td>
-      <td><button class="btn bs bsm" style="color:${r.ignored ? 'var(--ok)' : 'var(--er)'}" onclick="toggleIgnore('${r.id}','${r.ignored}')">${r.ignored ? '↩恢复' : '忽略'}</button></td>
+      <td>${cat[r.month_category]||'—'}</td>
+      <td class="ec" style="cursor:pointer;color:var(--wn);font-family:var(--mn);font-size:12px" onclick="ecText('${r.id}','recon_no',this,'invoices')">${r.recon_no||'<span style="color:var(--t3)">点击设置</span>'}</td>
+      <td class="ec" style="cursor:pointer" onclick="ecSel('${r.id}','payment_method',this,'invoices',['直接支付','贷款'])">${pm||'<span style="color:var(--t3);font-size:12px">点击设置</span>'}</td>
+      <td class="ec" style="cursor:pointer" onclick="ecSel('${r.id}','contract_type',this,'invoices',['确认合同','自有'])">${ct||'<span style="color:var(--t3);font-size:12px">点击设置</span>'}</td>
+      <td class="ec" style="cursor:pointer;font-family:var(--mn);font-size:12px" onclick="ecDate('${r.id}','payment_date',this,'invoices')">${r.payment_date||'<span style="color:var(--t3)">点击设置</span>'}</td>
+      <td><button class="btn bs sm" style="color:${r.ignored?'var(--ok)':'var(--er)'}" onclick="togIgn('${r.id}','${r.ignored}')">${r.ignored?'↩恢复':'忽略'}</button></td>
     </tr>`;
-  }).join('') : '<tr><td colspan="13" style="text-align:center;padding:36px;color:var(--t3)">暂无数据</td></tr>';
+  }).join(''):'<tr><td colspan="13" style="text-align:center;padding:32px;color:var(--t3)">暂无数据</td></tr>';
 }
 
-function srt(col) {
-  if (S.sort.col === col) S.sort.dir *= -1; else { S.sort.col = col; S.sort.dir = 1; }
+function srt(col){
+  if(S.sort.col===col)S.sort.dir*=-1;else{S.sort.col=col;S.sort.dir=1}
   renderT1();
 }
 
 // ── INLINE EDIT ──
-function editCellById(id, field, td) {
-  const inv = S.invoices.find(r => r.id === id);
-  const current = inv ? (inv[field] || '') : '';
-  const inp = document.createElement('input');
-  inp.className = 'ci';
-  inp.value = current;
-  td.innerHTML = '';
-  td.appendChild(inp);
-  inp.focus();
-  inp.onblur = async () => {
-    const val = inp.value.trim();
-    if (val === current) { renderT1(); return; }
-    try {
-      await api('PATCH', 'invoices', { [field]: val || null }, `?id=eq.${id}`);
-      if (inv) {
-        inv[field] = val || null;
-        // Sync recon_no to VIN details
-        if (field === 'recon_no' && val) {
-          const vinRows = S.vins.filter(v => v.invoice_no === inv.invoice_no);
-          for (const v of vinRows) {
-            await api('PATCH', 'vin_details', { recon_no: val }, `?id=eq.${v.id}`);
-            v.recon_no = val;
+function getRow(table,id){
+  if(table==='invoices')return S.invoices.find(r=>r.id===id);
+  if(table==='vin_details')return S.vins.find(r=>r.id===id);
+  return null;
+}
+
+function ecText(id,field,td,table){
+  const row=getRow(table,id);
+  const cur=row?(row[field]||''):'';
+  const inp=document.createElement('input');
+  inp.className='ci';inp.value=cur;
+  td.innerHTML='';td.appendChild(inp);inp.focus();
+  inp.onblur=async()=>{
+    const val=inp.value.trim();
+    if(val===cur){if(table==='invoices')renderT1();return}
+    try{
+      await api('PATCH',table,{[field]:val||null},`?id=eq.${id}`);
+      if(row){
+        row[field]=val||null;
+        if(table==='invoices'&&field==='recon_no'&&val){
+          const vinRows=S.vins.filter(v=>v.invoice_no===row.invoice_no);
+          for(const v of vinRows){
+            await api('PATCH','vin_details',{recon_no:val},`?id=eq.${v.id}`);
+            v.recon_no=val;
           }
         }
       }
-      toast('已保存', 'ok');
-      renderT1();
-      renderT3();
-    } catch (e) { toast('保存失败: ' + e.message, 'er'); renderT1(); }
+      toast('已保存','ok');
+    }catch(e){toast('保存失败: '+e.message,'er');console.error(e)}
+    if(table==='invoices')renderT1();
+    renderT3();
   };
-  inp.onkeydown = e => { if (e.key === 'Enter') inp.blur(); };
+  inp.onkeydown=e=>{if(e.key==='Enter')inp.blur()};
 }
 
-function editSelectById(id, field, td, options) {
-  const inv = S.invoices.find(r => r.id === id);
-  const current = inv ? (inv[field] || '') : '';
-  const sel = document.createElement('select');
-  sel.className = 'ci';
-  sel.innerHTML = '<option value="">—</option>' + options.map(o => `<option value="${o}" ${o === current ? 'selected' : ''}>${o}</option>`).join('');
-  td.innerHTML = '';
-  td.appendChild(sel);
-  sel.focus();
-  sel.onchange = async () => {
-    const val = sel.value;
-    try {
-      await api('PATCH', 'invoices', { [field]: val || null }, `?id=eq.${id}`);
-      if (inv) inv[field] = val || null;
-      toast('已保存', 'ok');
-      renderT1();
-      renderT3();
-    } catch (e) { toast('保存失败: ' + e.message, 'er'); renderT1(); }
+function ecSel(id,field,td,table,opts){
+  const row=getRow(table,id);
+  const cur=row?(row[field]||''):'';
+  const sel=document.createElement('select');
+  sel.className='ci';
+  sel.innerHTML='<option value="">—</option>'+opts.map(o=>`<option value="${o}"${o===cur?' selected':''}>${o}</option>`).join('');
+  td.innerHTML='';td.appendChild(sel);sel.focus();
+  sel.onchange=async()=>{
+    const val=sel.value;
+    try{
+      await api('PATCH',table,{[field]:val||null},`?id=eq.${id}`);
+      if(row)row[field]=val||null;
+      toast('已保存','ok');
+    }catch(e){toast('保存失败: '+e.message,'er')}
+    if(table==='invoices')renderT1();
+    renderT3();
   };
-  sel.onblur = () => setTimeout(() => renderT1(), 150);
+  sel.onblur=()=>setTimeout(()=>{if(table==='invoices')renderT1()},150);
 }
 
-async function toggleIgnore(id, current) {
-  const ignored = current === 'true' ? false : true;
-  await api('PATCH', 'invoices', { ignored }, `?id=eq.${id}`);
-  const inv = S.invoices.find(r => r.id === id);
-  if (inv) inv.ignored = ignored;
-  renderT1();
-  updStats();
+function ecDate(id,field,td,table){
+  const row=getRow(table,id);
+  const cur=row?(row[field]||''):'';
+  const inp=document.createElement('input');
+  inp.type='date';inp.className='ci';inp.value=cur;
+  td.innerHTML='';td.appendChild(inp);inp.focus();inp.click();
+  inp.onblur=async()=>{
+    const val=inp.value;
+    if(val===cur){if(table==='invoices')renderT1();return}
+    try{
+      await api('PATCH',table,{[field]:val||null},`?id=eq.${id}`);
+      if(row)row[field]=val||null;
+      toast('已保存','ok');
+    }catch(e){toast('保存失败: '+e.message,'er')}
+    if(table==='invoices')renderT1();
+  };
+  inp.onchange=()=>inp.blur();
 }
 
-// ── RENDER T2 ──
-let t2Filter = { q: '', status: '', profit: '', contract: '' };
-function ft2(v) { t2Filter.q = v; renderT2(); }
-function ft2st(v) { t2Filter.status = v; renderT2(); }
-function ft2pr(v) { t2Filter.profit = v; renderT2(); }
-function ft2ct(v) { t2Filter.contract = v; renderT2(); }
+async function togIgn(id,cur){
+  const ign=cur==='true'?false:true;
+  await api('PATCH','invoices',{ignored:ign},`?id=eq.${id}`);
+  const inv=S.invoices.find(r=>r.id===id);
+  if(inv)inv.ignored=ign;
+  renderT1();updStats();
+}
 
-function renderT2() {
-  let rows = S.vins;
-  const { q, status, profit, contract } = t2Filter;
-  if (q) { const lq = q.toLowerCase(); rows = rows.filter(r => (r.vin || '').toLowerCase().includes(lq) || (r.invoice_no || '').toLowerCase().includes(lq) || (r.sale_inv_no || '').toLowerCase().includes(lq)); }
-  if (status) rows = rows.filter(r => r.sale_status === status);
-  if (contract) rows = rows.filter(r => r.contract_type === contract);
-  if (profit) {
-    rows = rows.filter(r => {
-      const rt = r.gross_profit_rate;
-      if (profit === 'neg') return rt < 0;
-      if (profit === 'lt10') return rt >= 0 && rt < 10;
-      if (profit === 'lt20') return rt >= 0 && rt < 20;
-      if (profit === 'gt20') return rt >= 20;
+// ── T2: EDITABLE VIN TABLE ──
+let t2rows=[];
+
+function renderT2(){
+  // Build from S.vins
+  t2rows=S.vins.map(v=>({...v,_dirty:false}));
+  // Apply filters
+  const{q,st,pr}=S.f2;
+  let rows=t2rows;
+  if(q){const lq=q.toLowerCase();rows=rows.filter(r=>(r.vin||'').toLowerCase().includes(lq)||(r.invoice_no||'').toLowerCase().includes(lq)||(r.sale_inv_no||'').toLowerCase().includes(lq))}
+  if(st)rows=rows.filter(r=>r.sale_status===st);
+  if(pr){
+    rows=rows.filter(r=>{
+      const rt=r.gross_profit_rate;
+      if(pr==='neg')return rt<0;
+      if(pr==='lt10')return rt>=0&&rt<10;
+      if(pr==='lt20')return rt>=0&&rt<20;
+      if(pr==='gt20')return rt>=20;
       return true;
     });
   }
+  buildT2Table(rows);
+}
 
-  const ssBadge = { '全款': '<span class="bd ok">全款</span>', '欠款': '<span class="bd wn">欠款</span>', '未售': '<span class="bd mu">未售</span>', '租赁': '<span class="bd ac">租赁</span>' };
+function ft2q(v){S.f2.q=v;renderT2()}
+function ft2st(v){S.f2.st=v;renderT2()}
+function ft2pr(v){S.f2.pr=v;renderT2()}
 
-  document.getElementById('t2b').innerHTML = rows.length ? rows.map(r => {
-    const gp = r.gross_profit;
-    const gr = r.gross_profit_rate;
-    return `<tr>
-      <td class="mono" style="font-size:11px;color:var(--ac)">${r.invoice_no || '—'}</td>
-      <td class="mono" style="font-weight:600">${r.vin || '—'}</td>
-      <td style="font-size:12px;color:var(--t2)">${r.model || '—'}</td>
-      <td class="num" style="border-left:2px solid var(--b1)">${fmt(r.purchase_price_ex)}</td>
-      <td class="num" style="font-size:11px;color:var(--t3)">${fmt(r.purchase_gst)}</td>
-      <td class="num" style="font-weight:600">${fmt(r.purchase_total)}</td>
-      <td class="mono" style="border-left:2px solid var(--b1);font-size:11px;color:var(--wn)">${r.sale_inv_no || '—'}</td>
-      <td class="num">${fmt(r.sale_price_ex)}</td>
-      <td class="num" style="color:${gp > 0 ? 'var(--ok)' : gp < 0 ? 'var(--er)' : 'var(--t3)'};font-weight:600">${gp != null ? fmt(gp) : '—'}</td>
-      <td class="num" style="color:${gr > 20 ? 'var(--ok)' : gr > 0 ? 'var(--wn)' : 'var(--er)'}">${gr != null ? gr + '%' : '—'}</td>
-      <td>${ssBadge[r.sale_status] || '—'}</td>
-      <td style="border-left:2px solid var(--b1);font-family:var(--mn);font-size:12px;color:var(--wn)">${r.recon_no || '—'}</td>
-      <td>${r.contract_type ? `<span class="bd mu">${r.contract_type}</span>` : '—'}</td>
-      <td>${r.payment_method ? `<span class="bd ${r.payment_method === '直接支付' ? 'ok' : 'ac'}">${r.payment_method}</span>` : '—'}</td>
-    </tr>`;
-  }).join('') : '<tr><td colspan="14" style="text-align:center;padding:36px;color:var(--t3)">暂无VIN数据</td></tr>';
+function buildT2Table(rows){
+  const tbody=document.getElementById('t2b');
+  tbody.innerHTML=rows.map((r,i)=>makeVinRow(r,i)).join('');
+  // Attach paste handler to first cell of each row
+  tbody.querySelectorAll('tr').forEach(tr=>{
+    tr.addEventListener('paste',handleRowPaste);
+  });
+}
+
+function makeVinRow(r,i){
+  const calcGST=se=>r2((parseFloat(se)||0)*(parseFloat(r.gst_rate||10)/100));
+  const calcTotal=se=>{const ex=parseFloat(se)||0;const g=r2(ex*(parseFloat(r.gst_rate||10)/100));return r2(ex+g)};
+  const calcProfit=(se,pur)=>{const s=parseFloat(se)||0,p=parseFloat(pur)||0;return(s&&p)?r2(s-p):''};
+  const calcRate=(se,pur)=>{const s=parseFloat(se)||0,p=parseFloat(pur)||0;return(s&&p)?Math.round((s-p)/s*100):''};
+  const gst=r.purchase_gst!=null?r.purchase_gst:calcGST(r.purchase_price_ex);
+  const tot=r.purchase_total!=null?r.purchase_total:calcTotal(r.purchase_price_ex);
+  const prof=r.gross_profit!=null?r.gross_profit:calcProfit(r.sale_price_ex,r.purchase_price_ex);
+  const rate=r.gross_profit_rate!=null?r.gross_profit_rate:calcRate(r.sale_price_ex,r.purchase_price_ex);
+  const id=r.id||('new_'+i);
+  return`<tr data-id="${id}" data-idx="${i}">
+    <td style="text-align:center;color:var(--t3);padding:4px 6px;font-size:11px">${i+1}</td>
+    <td><input value="${r.invoice_no||''}" oninput="onVinCell(this,'invoice_no')" placeholder="发票号"></td>
+    <td><input value="${r.purchase_po||''}" oninput="onVinCell(this,'purchase_po')" placeholder="PO号"></td>
+    <td><input value="${r.vin||''}" oninput="onVinCell(this,'vin')" placeholder="车架号" style="font-weight:600"></td>
+    <td><input value="${r.model||''}" oninput="onVinCell(this,'model')" placeholder="型号/规格"></td>
+    <td><input type="number" value="${r.purchase_price_ex||''}" oninput="onVinPrice(this)" placeholder="0.00" style="text-align:right"></td>
+    <td><input type="number" value="${r.gst_rate||10}" oninput="onVinGST(this)" style="text-align:right;width:60px"></td>
+    <td class="ro">${gst!==''?fmt(gst):'—'}</td>
+    <td class="ro">${tot!==''?fmt(tot):'—'}</td>
+    <td><input value="${r.sale_inv_no||''}" oninput="onVinCell(this,'sale_inv_no')" placeholder="销售单号"></td>
+    <td><input type="number" value="${r.sale_price_ex||''}" oninput="onVinSale(this)" placeholder="0.00" style="text-align:right"></td>
+    <td class="ro" style="color:${prof>0?'var(--ok)':prof<0?'var(--er)':'var(--t3)'}">${prof!==''?fmt(prof):'—'}</td>
+    <td class="ro" style="color:${rate>20?'var(--ok)':rate>0?'var(--wn)':'var(--er)'}">${rate!==''?rate+'%':'—'}</td>
+    <td><select onchange="onVinCell(this,'sale_status')">
+      <option value="">—</option>
+      ${['全款','欠款','未售','租赁'].map(o=>`<option value="${o}"${r.sale_status===o?' selected':''}>${o}</option>`).join('')}
+    </select></td>
+    <td><input value="${r.recon_no||''}" oninput="onVinCell(this,'recon_no')" placeholder="对账号" style="color:var(--wn)"></td>
+    <td><select onchange="onVinCell(this,'contract_type')">
+      <option value="">—</option>
+      ${['确认合同','自有'].map(o=>`<option value="${o}"${r.contract_type===o?' selected':''}>${o}</option>`).join('')}
+    </select></td>
+    <td><select onchange="onVinCell(this,'payment_method')">
+      <option value="">—</option>
+      ${['直接支付','贷款'].map(o=>`<option value="${o}"${r.payment_method===o?' selected':''}>${o}</option>`).join('')}
+    </select></td>
+    <td style="text-align:center"><button class="btn bs sm" style="color:var(--er);padding:2px 7px" onclick="delVinRow(this,'${id}')">✕</button></td>
+  </tr>`;
+}
+
+function getRowData(tr){
+  const inputs=tr.querySelectorAll('input,select');
+  const fields=['_num','invoice_no','purchase_po','vin','model','purchase_price_ex','gst_rate',null,null,'sale_inv_no','sale_price_ex',null,null,'sale_status','recon_no','contract_type','payment_method','_del'];
+  const obj={};
+  inputs.forEach((inp,i)=>{
+    const f=fields[i];
+    if(f&&!f.startsWith('_'))obj[f]=inp.value.trim();
+  });
+  // Recalc
+  const ex=parseFloat(obj.purchase_price_ex)||0;
+  const gr=parseFloat(obj.gst_rate)||10;
+  if(ex){obj.purchase_gst=r2(ex*gr/100);obj.purchase_total=r2(ex+obj.purchase_gst)}
+  const se=parseFloat(obj.sale_price_ex)||0;
+  if(ex&&se){obj.gross_profit=r2(se-ex);obj.gross_profit_rate=se>0?Math.round(obj.gross_profit/se*100):0}
+  return obj;
+}
+
+function onVinCell(inp,field){
+  const tr=inp.closest('tr');
+  tr.style.background='#fffbeb';
+}
+
+function onVinPrice(inp){
+  const tr=inp.closest('tr');
+  const ex=parseFloat(inp.value)||0;
+  const gstR=parseFloat(tr.querySelector('td:nth-child(7) input').value)||10;
+  const gst=r2(ex*gstR/100);
+  const tot=r2(ex+gst);
+  tr.querySelector('td:nth-child(8)').textContent=ex?fmt(gst):'—';
+  tr.querySelector('td:nth-child(9)').textContent=ex?fmt(tot):'—';
+  updateProfit(tr);
+  tr.style.background='#fffbeb';
+}
+
+function onVinGST(inp){
+  const tr=inp.closest('tr');
+  const ex=parseFloat(tr.querySelector('td:nth-child(6) input').value)||0;
+  const gstR=parseFloat(inp.value)||10;
+  const gst=r2(ex*gstR/100);
+  const tot=r2(ex+gst);
+  tr.querySelector('td:nth-child(8)').textContent=ex?fmt(gst):'—';
+  tr.querySelector('td:nth-child(9)').textContent=ex?fmt(tot):'—';
+  tr.style.background='#fffbeb';
+}
+
+function onVinSale(inp){
+  const tr=inp.closest('tr');
+  updateProfit(tr);
+  tr.style.background='#fffbeb';
+}
+
+function updateProfit(tr){
+  const ex=parseFloat(tr.querySelector('td:nth-child(6) input').value)||0;
+  const se=parseFloat(tr.querySelector('td:nth-child(11) input').value)||0;
+  const prof=r2(se-ex);
+  const rate=se>0?Math.round(prof/se*100):0;
+  const pc=tr.querySelector('td:nth-child(12)');
+  const rc=tr.querySelector('td:nth-child(13)');
+  pc.textContent=(ex&&se)?fmt(prof):'—';
+  pc.style.color=prof>0?'var(--ok)':prof<0?'var(--er)':'var(--t3)';
+  rc.textContent=(ex&&se)?rate+'%':'—';
+  rc.style.color=rate>20?'var(--ok)':rate>0?'var(--wn)':'var(--er)';
+}
+
+// PASTE HANDLER - paste row data from Excel/Lark
+function handleRowPaste(e){
+  e.preventDefault();
+  const clipText=e.clipboardData.getData('text/plain');
+  if(!clipText.trim())return;
+  const lines=clipText.split(/\r?\n/).filter(l=>l.trim());
+  const tr=e.currentTarget;
+  const tbody=document.getElementById('t2b');
+  const allRows=[...tbody.querySelectorAll('tr')];
+  const startIdx=allRows.indexOf(tr);
+  // Map clipboard cols to our input order: invoice_no, purchase_po, vin, model, purchase_price_ex, gst_rate, sale_inv_no, sale_price_ex, sale_status, recon_no, contract_type, payment_method
+  const inputOrder=[0,1,2,3,4,5,8,9,10,11,12,13]; // input index in row
+  for(let li=0;li<lines.length;li++){
+    const cols=lines[li].split('\t');
+    let targetRow=allRows[startIdx+li];
+    if(!targetRow){
+      // Add new row
+      addVinRow();
+      targetRow=[...tbody.querySelectorAll('tr')][startIdx+li];
+    }
+    if(!targetRow)continue;
+    const inputs=[...targetRow.querySelectorAll('input,select')];
+    cols.forEach((val,ci)=>{
+      if(ci>=inputOrder.length)return;
+      const inp=inputs[inputOrder[ci]];
+      if(!inp)return;
+      inp.value=val.trim();
+      if(inp.tagName==='INPUT'&&(inp.type==='number'||!inp.type)){
+        inp.dispatchEvent(new Event('input'));
+      }
+    });
+    onVinPrice(targetRow.querySelector('td:nth-child(6) input'));
+    targetRow.style.background='#fffbeb';
+  }
+  toast(`粘贴了${lines.length}行数据，记得点「保存全部」`,'ok',4000);
+}
+
+function addVinRow(){
+  const tbody=document.getElementById('t2b');
+  const idx=tbody.querySelectorAll('tr').length;
+  const emptyRow={invoice_no:'',purchase_po:'',vin:'',model:'',purchase_price_ex:'',gst_rate:10,purchase_gst:null,purchase_total:null,sale_inv_no:'',sale_price_ex:'',gross_profit:null,gross_profit_rate:null,sale_status:'',recon_no:'',contract_type:'',payment_method:''};
+  const tr=document.createElement('tr');
+  tr.innerHTML=makeVinRow(emptyRow,idx).replace(/<tr[^>]*>/,'').replace(/<\/tr>/,'');
+  tr.dataset.id='new_'+Date.now();
+  tr.addEventListener('paste',handleRowPaste);
+  tbody.appendChild(tr);
+  tr.querySelector('input').focus();
+}
+
+async function saveAllVins(){
+  const tbody=document.getElementById('t2b');
+  const rows=[...tbody.querySelectorAll('tr')];
+  let saved=0,errs=0;
+  document.getElementById('t2status').textContent='保存中...';
+  for(const tr of rows){
+    if(!tr.style.background&&tr.dataset.id&&!tr.dataset.id.startsWith('new_'))continue;
+    const data=getRowData(tr);
+    if(!data.vin)continue;
+    data.store=S.store;
+    try{
+      const id=tr.dataset.id;
+      if(id&&!id.startsWith('new_')){
+        await api('PATCH','vin_details',data,`?id=eq.${id}`);
+      }else{
+        const res=await api('POST','vin_details',[data]);
+        if(res&&res[0])tr.dataset.id=res[0].id;
+      }
+      tr.style.background='';
+      saved++;
+    }catch(e){console.error(e);errs++}
+  }
+  document.getElementById('t2status').textContent=errs?`${saved}行已保存，${errs}行失败`:`${saved}行已保存`;
+  toast(`保存完成：${saved}行`,'ok');
+  await loadData();
+}
+
+async function delVinRow(btn,id){
+  const tr=btn.closest('tr');
+  if(id&&!id.startsWith('new_')){
+    try{await api('DELETE','vin_details',null,`?id=eq.${id}`)}catch(e){console.error(e)}
+  }
+  tr.remove();
+  toast('已删除','ok');
 }
 
 // ── RENDER T3 ──
-function renderT3() {
-  // Recon payment cards
-  const rc = document.getElementById('t3rc');
-  if (S.recons.length) {
-    const byR = {};
-    S.recons.forEach(r => {
-      if (!byR[r.recon_no]) byR[r.recon_no] = { total: 0, items: [] };
-      byR[r.recon_no].total += Number(r.payment_amount);
+function renderT3(){
+  // Recon cards
+  const rc=document.getElementById('t3rc');
+  if(S.recons.length){
+    const byR={};
+    S.recons.forEach(r=>{
+      if(!byR[r.recon_no])byR[r.recon_no]={total:0,items:[]};
+      byR[r.recon_no].total+=Number(r.payment_amount);
       byR[r.recon_no].items.push(r);
     });
-    rc.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px">${Object.entries(byR).map(([rn, d]) =>
-      `<div class="biz-card"><div class="biz-po">${rn}</div>
-       <div style="font-family:var(--hd);font-size:19px;font-weight:700">${fmt(d.total)}</div>
-       <div style="font-size:11px;color:var(--t3);margin-top:4px">${d.items.length}笔 · ${d.items[0].payment_method || ''}</div></div>`
-    ).join('')}</div>`;
-  } else {
-    rc.innerHTML = '<div style="color:var(--t3);font-size:13px;padding:8px 0">暂无对账号记录，点击「新增对账号」添加</div>';
+    rc.innerHTML=`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:9px">
+      ${Object.entries(byR).map(([rn,d])=>`<div style="background:var(--s1);border:1px solid var(--b1);border-radius:var(--r);padding:14px;border-left:4px solid var(--wn);box-shadow:var(--sh)">
+        <div style="font-family:var(--mn);font-size:13px;font-weight:700;color:var(--wn);margin-bottom:5px">${rn}</div>
+        <div style="font-family:var(--hd);font-size:18px;font-weight:700">${fmt(d.total)}</div>
+        <div style="font-size:11px;color:var(--t3);margin-top:3px">${d.items.length}笔 · ${d.items[0].payment_method||''}</div>
+      </div>`).join('')}
+    </div>`;
+  }else{
+    rc.innerHTML='<div style="color:var(--t3);font-size:13px;padding:6px 0">暂无对账号记录，点击「新增对账号」添加</div>';
   }
 
-  // PO table - merge from invoices + biz_contracts
-  const poMap = {};
-  S.invoices.forEach(r => {
-    if (!r.reference) return;
-    const po = extractPO(r.reference);
-    if (!poMap[po]) poMap[po] = { invoices: [], balance: 0, recons: new Set() };
-    poMap[po].invoices.push(r);
-    poMap[po].balance += Number(r.balance_aud);
-    if (r.recon_no) poMap[po].recons.add(r.recon_no);
+  // Build PO map from invoices
+  const poMap={};
+  S.invoices.forEach(r=>{
+    if(!r.reference)return;
+    const po=xPO(r.reference);
+    if(!poMap[po])poMap[po]={invs:[],stmtBal:0,reconNos:new Set(),payments:[]};
+    poMap[po].invs.push(r);
+    poMap[po].stmtBal+=Number(r.balance_aud);
+    if(r.recon_no)poMap[po].reconNos.add(r.recon_no);
+    if(r.recon_no&&r.payment_date)poMap[po].payments.push({recon_no:r.recon_no,date:r.payment_date,method:r.payment_method});
   });
 
-  const bizByPO = {};
-  (S.biz || []).forEach(b => { bizByPO[b.po_no] = b; });
+  // Contract total from vin_details
+  const poVinTotal={};
+  S.vins.forEach(v=>{
+    if(!v.purchase_po)return;
+    const po=xPO(v.purchase_po);
+    if(!poVinTotal[po])poVinTotal[po]=0;
+    poVinTotal[po]+=Number(v.purchase_total||0);
+  });
 
-  const pos = Object.entries(poMap).sort((a, b) => b[1].balance - a[1].balance);
+  // Build paid slots from recon_payments grouped by recon_no
+  const reconAmt={};
+  S.recons.forEach(r=>{reconAmt[r.recon_no]=(reconAmt[r.recon_no]||0)+Number(r.payment_amount)});
 
-  document.getElementById('t3b').innerHTML = pos.length ? pos.map(([po, d]) => {
-    const biz = bizByPO[po] || {};
-    const p1 = biz.paid1_amount || 0, p2 = biz.paid2_amount || 0, p3 = biz.paid3_amount || 0, p4 = biz.paid4_amount || 0;
-    const paidTotal = r2(p1 + p2 + p3 + p4);
-    const remaining = r2(d.balance - paidTotal);
-    const fmtPaid = (amt, date, rno) => amt > 0 ? `<div style="font-family:var(--mn);font-size:12px;font-weight:600">${fmt(amt)}</div>${date ? '<div style="font-size:10px;color:var(--t3)">' + date + '</div>' : ''}${rno ? '<div style="font-size:10px;color:var(--wn)">' + rno + '</div>' : ''}` : '—';
+  const pos=Object.entries(poMap).sort((a,b)=>b[1].stmtBal-a[1].stmtBal);
 
-    return `<tr>
+  document.getElementById('t3b').innerHTML=pos.length?pos.map(([po,d])=>{
+    const cTotal=poVinTotal[po]||null;
+    const recons=[...d.reconNos];
+
+    // Get unique paid slots from Statement invoices (up to 4 recon_no+date combos)
+    const paidSlots=[];
+    const seen=new Set();
+    d.invs.forEach(inv=>{
+      if(inv.recon_no&&!seen.has(inv.recon_no)){
+        seen.add(inv.recon_no);
+        const rc=S.recons.find(r=>r.recon_no===inv.recon_no);
+        paidSlots.push({
+          recon_no:inv.recon_no,
+          date:inv.payment_date||'',
+          amount:reconAmt[inv.recon_no]||0,
+          method:rc?rc.payment_method:''
+        });
+      }
+    });
+
+    const paidTotal=paidSlots.reduce((s,p)=>s+p.amount,0);
+    const remaining=r2(d.stmtBal-paidTotal);
+
+    function paidCell(slot){
+      if(!slot)return'—';
+      return`<div style="font-size:12px;font-weight:600;font-family:var(--mn)">${fmt(slot.amount)}</div>
+             <div style="font-size:10px;color:var(--wn)">${slot.recon_no}</div>
+             <div style="font-size:10px;color:var(--t3)">${slot.date||''}</div>`;
+    }
+
+    return`<tr>
       <td class="mono" style="font-weight:600;font-size:12px">${po}</td>
-      <td class="num">${biz.contract_total ? fmt(biz.contract_total) : '—'}</td>
-      <td class="num" style="font-weight:700">${fmt(d.balance)}</td>
-      <td>${fmtPaid(p1, biz.paid1_date, biz.paid1_recon)}</td>
-      <td>${fmtPaid(p2, biz.paid2_date, biz.paid2_recon)}</td>
-      <td>${fmtPaid(p3, biz.paid3_date, biz.paid3_recon)}</td>
-      <td>${fmtPaid(p4, biz.paid4_date, biz.paid4_recon)}</td>
-      <td class="num" style="color:var(--ok);font-weight:700">${paidTotal > 0 ? fmt(paidTotal) : '—'}</td>
-      <td class="num" style="color:${remaining > 0 ? 'var(--wn)' : 'var(--ok)'};font-weight:700">${fmt(remaining)}</td>
-      <td class="mono" style="font-size:11px;color:var(--wn)">${[...d.recons].join(', ') || '—'}</td>
-      <td style="text-align:center">${d.invoices.length}</td>
-      <td><span class="bd ${remaining <= 0 ? 'ok' : 'wn'}">${remaining <= 0 ? '已结清' : '未结清'}</span></td>
+      <td class="num">${cTotal?fmt(cTotal):'—'}</td>
+      <td class="num" style="font-weight:700">${fmt(d.stmtBal)}</td>
+      <td>${paidCell(paidSlots[0])}</td>
+      <td>${paidCell(paidSlots[1])}</td>
+      <td>${paidCell(paidSlots[2])}</td>
+      <td>${paidCell(paidSlots[3])}</td>
+      <td class="num" style="color:var(--ok);font-weight:700">${paidTotal>0?fmt(paidTotal):'—'}</td>
+      <td class="num" style="color:${remaining>0?'var(--wn)':'var(--ok)'};font-weight:700">${fmt(remaining)}</td>
+      <td class="mono" style="font-size:11px;color:var(--wn)">${recons.join(', ')||'—'}</td>
+      <td style="text-align:center">
+        <button class="btn bs sm" onclick="showPODetail('${po}')">${d.invs.length}张</button>
+      </td>
+      <td><span class="bd ${remaining<=0?'b-ok':'b-wn'}">${remaining<=0?'已结清':'未结清'}</span></td>
     </tr>`;
-  }).join('') : '<tr><td colspan="12" style="text-align:center;padding:36px;color:var(--t3)">暂无数据</td></tr>';
+  }).join(''):'<tr><td colspan="12" style="text-align:center;padding:32px;color:var(--t3)">暂无数据</td></tr>';
 }
 
-function extractPO(ref) {
-  if (!ref) return ref;
-  const m = ref.match(/PO[-\s]?([\w]+)/i);
-  return m ? 'PO-' + m[1] : ref.split('/')[0];
+function xPO(ref){
+  if(!ref)return ref;
+  const m=ref.match(/PO[-\s]?([\w]+)/i);
+  return m?'PO-'+m[1]:ref.split('/')[0];
+}
+
+function showPODetail(po){
+  const invs=S.invoices.filter(r=>xPO(r.reference)===po);
+  document.getElementById('poMoT').textContent=`PO详情：${po}`;
+  const now=new Date();
+  document.getElementById('poMoB').innerHTML=`<div class="tw"><table>
+    <thead><tr>
+      <th>发票号</th><th>发票日期</th><th>到期日</th>
+      <th class="num">Invoice Amount</th><th class="num">已付</th>
+      <th class="num">Balance AUD</th><th>状态</th><th>对账号</th><th>付款日期</th>
+    </tr></thead>
+    <tbody>${invs.map(r=>{
+      const due=parseDue(r.due_date);
+      const isOv=due&&due<now&&r.balance_aud>0;
+      const cat={new:'<span class="bd b-ok">本月新增</span>',carry:'<span class="bd b-wn">上月延续</span>',earlier:'<span class="bd b-mu">更早未付</span>'}[r.month_category]||'';
+      return`<tr>
+        <td class="mono" style="font-weight:600;color:var(--ac);font-size:12px">${r.invoice_no}${isOv?' <span class="bd b-er">逾期</span>':''}</td>
+        <td class="mono" style="font-size:11px">${r.invoice_date||'—'}</td>
+        <td class="mono" style="font-size:11px;color:${isOv?'var(--er)':'inherit'}">${r.due_date||'—'}</td>
+        <td class="num">${fmt(r.invoice_amount)}</td>
+        <td class="num" style="color:var(--ok)">${r.payments>0?fmt(r.payments):'—'}</td>
+        <td class="num" style="font-weight:700">${fmt(r.balance_aud)}</td>
+        <td>${cat}</td>
+        <td class="mono" style="font-size:11px;color:var(--wn)">${r.recon_no||'—'}</td>
+        <td class="mono" style="font-size:11px">${r.payment_date||'—'}</td>
+      </tr>`;
+    }).join('')}
+    <tr style="background:#f8fafc;font-weight:700">
+      <td colspan="5" style="font-family:var(--mn);font-size:12px">合计</td>
+      <td class="num" style="font-weight:700;color:var(--ac)">${fmt(invs.reduce((s,r)=>s+Number(r.balance_aud),0))}</td>
+      <td colspan="3"></td>
+    </tr>
+    </tbody>
+  </table></div>`;
+  document.getElementById('poMo').classList.add('on');
 }
 
 // ── RENDER T4 ──
-function renderT4() {
-  const byM = {};
-  S.invoices.forEach(r => {
-    if (!byM[r.statement_month]) byM[r.statement_month] = { invoices: [], total: 0, newAmt: 0, paid: 0 };
-    byM[r.statement_month].invoices.push(r);
-    byM[r.statement_month].total += Number(r.balance_aud);
-    byM[r.statement_month].paid += Number(r.payments);
-    if (r.month_category === 'new') byM[r.statement_month].newAmt += Number(r.balance_aud);
+function renderT4(){
+  const byM={};
+  S.invoices.forEach(r=>{
+    if(!byM[r.statement_month])byM[r.statement_month]={invs:[],total:0,newAmt:0,paid:0};
+    byM[r.statement_month].invs.push(r);
+    byM[r.statement_month].total+=Number(r.balance_aud);
+    byM[r.statement_month].paid+=Number(r.payments);
+    if(r.month_category==='new')byM[r.statement_month].newAmt+=Number(r.balance_aud);
   });
-
-  const months = Object.keys(byM).sort().reverse();
-  const now = new Date();
-  document.getElementById('t4b').innerHTML = months.length ? months.map(m => {
-    const d = byM[m];
-    const ov = d.invoices.filter(r => { const due = parseDue(r.due_date); return due && due < now && r.balance_aud > 0; }).length;
-    const nw = d.invoices.filter(r => r.month_category === 'new').length;
-    return `<tr>
+  const months=Object.keys(byM).sort().reverse();
+  const now=new Date();
+  document.getElementById('t4b').innerHTML=months.length?months.map(m=>{
+    const d=byM[m];
+    const ov=d.invs.filter(r=>{const due=parseDue(r.due_date);return due&&due<now&&r.balance_aud>0}).length;
+    const nw=d.invs.filter(r=>r.month_category==='new').length;
+    return`<tr>
       <td class="mono" style="font-weight:700">${m}</td>
-      <td><span class="bd ac">${S.store}</span></td>
+      <td><span class="bd b-ac">${S.store}</span></td>
       <td class="num" style="font-weight:700">${fmt(d.total)}</td>
       <td class="num" style="color:var(--ok)">${fmt(d.newAmt)}</td>
-      <td class="num" style="color:var(--ok)">${d.paid > 0 ? fmt(d.paid) : '—'}</td>
+      <td class="num" style="color:var(--ok)">${d.paid>0?fmt(d.paid):'—'}</td>
       <td class="num" style="color:var(--wn);font-weight:700">${fmt(d.total)}</td>
-      <td class="num">${d.invoices.length}</td>
+      <td class="num">${d.invs.length}</td>
       <td class="num" style="color:var(--ok)">${nw}</td>
-      <td class="num" style="color:${ov > 0 ? 'var(--er)' : 'var(--t3)'}">${ov}</td>
+      <td class="num" style="color:${ov>0?'var(--er)':'var(--t3)'}">${ov}</td>
     </tr>`;
-  }).join('') : '<tr><td colspan="9" style="text-align:center;padding:36px;color:var(--t3)">暂无数据</td></tr>';
+  }).join(''):'<tr><td colspan="9" style="text-align:center;padding:32px;color:var(--t3)">暂无数据</td></tr>';
 
-  const t4rc = document.getElementById('t4rc');
-  t4rc.innerHTML = S.recons.length ? `<div class="tw"><table>
+  document.getElementById('t4rc').innerHTML=S.recons.length?`<div class="tw"><table>
     <thead><tr><th>对账号</th><th>付款方式</th><th class="num">金额</th><th>付款日期</th><th>备注</th></tr></thead>
-    <tbody>${S.recons.map(r => `<tr>
+    <tbody>${S.recons.map(r=>`<tr>
       <td class="mono" style="color:var(--wn);font-weight:700">${r.recon_no}</td>
-      <td><span class="bd ${r.payment_method === '直接支付' ? 'ok' : 'ac'}">${r.payment_method || '—'}</span></td>
+      <td><span class="bd ${r.payment_method==='直接支付'?'b-ok':'b-ac'}">${r.payment_method||'—'}</span></td>
       <td class="num" style="font-weight:600">${fmt(r.payment_amount)}</td>
-      <td class="mono" style="font-size:12px">${r.payment_date || '—'}</td>
-      <td style="color:var(--t3)">${r.notes || '—'}</td>
+      <td class="mono" style="font-size:12px">${r.payment_date||'—'}</td>
+      <td style="color:var(--t3)">${r.notes||'—'}</td>
     </tr>`).join('')}</tbody>
-  </table></div>` : '<div style="color:var(--t3);font-size:13px;padding:8px 0">暂无对账号记录</div>';
+  </table></div>`:'<div style="color:var(--t3);font-size:13px;padding:6px 0">暂无对账号记录</div>';
 }
 
-// ── RECON PAYMENT ──
-async function saveRecon() {
-  const data = {
-    recon_no: document.getElementById('rNo').value.trim(),
-    payment_amount: parseFloat(document.getElementById('rAmt').value) || 0,
-    payment_date: document.getElementById('rDate').value,
-    payment_method: document.getElementById('rMeth').value,
-    notes: document.getElementById('rNote').value || null,
-    store: S.store,
+// ── RECON ──
+async function saveRecon(){
+  const data={
+    recon_no:document.getElementById('rNo').value.trim(),
+    payment_amount:parseFloat(document.getElementById('rAmt').value)||0,
+    payment_date:document.getElementById('rDate').value,
+    payment_method:document.getElementById('rMeth').value,
+    notes:document.getElementById('rNote').value||null,
+    store:S.store
   };
-  if (!data.recon_no) { toast('请填写对账号', 'wn'); return; }
-  await api('POST', 'recon_payments', [data]);
-  S.recons.unshift(data);
-  toast('已保存', 'ok');
-  closeM('reconModal');
-  renderT3(); renderT4();
+  if(!data.recon_no){toast('请填写对账号','wn');return}
+  try{
+    await api('POST','recon_payments',[data]);
+    S.recons.unshift(data);
+    toast('已保存','ok');
+    closeM('reconMo');
+    renderT3();renderT4();
+  }catch(e){toast('保存失败: '+e.message,'er')}
 }
 
 // ── EXPORT ──
-function expT1() {
-  const cur = S.invoices.filter(r => r.statement_month === S.month);
-  const ws = XLSX.utils.json_to_sheet(cur.map(r => ({
-    '发票号': r.invoice_no, '发票日期': r.invoice_date, '到期日': r.due_date,
-    'PO/合同号': r.reference, 'Invoice Amount': r.invoice_amount,
-    '已付': r.payments, 'Balance AUD': r.balance_aud,
-    '状态分类': { new: '本月新增', carry: '上月延续', earlier: '更早未付' }[r.month_category] || '',
-    '对账号': r.recon_no || '', '付款方式': r.payment_method || '',
-    '合同类别': r.contract_type || '', '付款日期': r.payment_date || '',
-  })));
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Statement');
-  XLSX.writeFile(wb, `Statement_${S.store}_${S.month}.xlsx`);
+function expT1(){
+  const cur=S.invoices.filter(r=>r.statement_month===S.month);
+  const ws=XLSX.utils.json_to_sheet(cur.map(r=>({'发票号':r.invoice_no,'发票日期':r.invoice_date,'到期日':r.due_date,'PO/合同号':r.reference,'Invoice Amount':r.invoice_amount,'已付':r.payments,'Balance AUD':r.balance_aud,'状态分类':{new:'本月新增',carry:'上月延续',earlier:'更早未付'}[r.month_category]||'','对账号':r.recon_no||'','付款方式':r.payment_method||'','合同类别':r.contract_type||'','付款日期':r.payment_date||''})));
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Statement');
+  XLSX.writeFile(wb,`Statement_${S.store}_${S.month}.xlsx`);
 }
 
-function expT2() {
-  const ws = XLSX.utils.json_to_sheet(S.vins.map(r => ({
-    '发票号': r.invoice_no, 'VIN': r.vin, '型号': r.model,
-    '采购价(不含税)': r.purchase_price_ex, '采购GST': r.purchase_gst, '采购合计': r.purchase_total,
-    '销售单号': r.sale_inv_no, '销售价(不含税)': r.sale_price_ex,
-    '毛利': r.gross_profit, '毛利率%': r.gross_profit_rate,
-    '销售状态': r.sale_status, '对账号': r.recon_no,
-    '合同类别': r.contract_type, '付款方式': r.payment_method,
-  })));
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, '发票明细');
-  XLSX.writeFile(wb, `发票明细_${S.store}.xlsx`);
+function expT2(){
+  const ws=XLSX.utils.json_to_sheet(S.vins.map(r=>({'发票号':r.invoice_no,'PO号':r.purchase_po,'VIN':r.vin,'型号':r.model,'采购价(不含税)':r.purchase_price_ex,'GST率':r.gst_rate,'GST':r.purchase_gst,'采购合计':r.purchase_total,'销售单号':r.sale_inv_no,'销售价(不含税)':r.sale_price_ex,'毛利':r.gross_profit,'毛利率%':r.gross_profit_rate,'销售状态':r.sale_status,'对账号':r.recon_no,'合同类别':r.contract_type,'付款方式':r.payment_method})));
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'发票明细');
+  XLSX.writeFile(wb,`发票明细_${S.store}.xlsx`);
 }
 
 loadData();
