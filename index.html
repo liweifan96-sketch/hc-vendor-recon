@@ -624,21 +624,37 @@ function ecText(id,field,td,table){
 function ecSel(id,field,td,table,opts){
   const row=getRow(table,id);
   const cur=row?(row[field]||''):'';
+  const wrap=document.createElement('div');
+  wrap.style.cssText='position:relative;display:inline-block;min-width:90px';
   const sel=document.createElement('select');
   sel.className='ci';
+  sel.style.cssText='width:100%;min-width:90px;padding:4px 6px;font-size:12px;border:1px solid var(--ac);border-radius:4px;background:#fff;cursor:pointer';
   sel.innerHTML='<option value="">—</option>'+opts.map(o=>`<option value="${o}"${o===cur?' selected':''}>${o}</option>`).join('');
-  td.innerHTML='';td.appendChild(sel);sel.focus();
+  wrap.appendChild(sel);
+  td.innerHTML='';td.appendChild(wrap);
+  // Use size to show dropdown always visible
+  sel.size=opts.length+1;
+  sel.style.cssText='width:100%;min-width:100px;font-size:12px;border:1px solid var(--ac);border-radius:4px;background:#fff;cursor:pointer;position:absolute;z-index:999;box-shadow:0 4px 12px rgba(0,0,0,.15)';
   sel.onchange=async()=>{
     const val=sel.value;
+    sel.size=1;
     try{
       await api('PATCH',table,{[field]:val||null},`?id=eq.${id}`);
-      if(row)row[field]=val||null;
+      if(row){
+        row[field]=val||null;
+        if(table==='invoices'&&field==='recon_no'&&val){
+          const vinRows=S.vins.filter(v=>v.invoice_no===row.invoice_no);
+          for(const v of vinRows){
+            await api('PATCH','vin_details',{recon_no:val},`?id=eq.${v.id}`);
+            v.recon_no=val;
+          }
+        }
+      }
       toast('已保存','ok');
     }catch(e){toast('保存失败: '+e.message,'er')}
     if(table==='invoices')renderT1();
     renderT3();
   };
-  sel.onblur=()=>setTimeout(()=>{if(table==='invoices')renderT1()},150);
 }
 
 function ecDate(id,field,td,table){
@@ -646,7 +662,10 @@ function ecDate(id,field,td,table){
   const cur=row?(row[field]||''):'';
   const inp=document.createElement('input');
   inp.type='date';inp.className='ci';inp.value=cur;
-  td.innerHTML='';td.appendChild(inp);inp.focus();inp.click();
+  inp.style.cssText='border:1px solid var(--ac);border-radius:4px;padding:3px 6px;font-size:12px;font-family:var(--mn);outline:none;background:#fff;cursor:pointer';
+  td.innerHTML='';td.appendChild(inp);
+  // Small delay before focus to prevent immediate blur
+  setTimeout(()=>{inp.focus();inp.showPicker&&inp.showPicker()},50);
   inp.onblur=async()=>{
     const val=inp.value;
     if(val===cur){if(table==='invoices')renderT1();return}
@@ -657,7 +676,15 @@ function ecDate(id,field,td,table){
     }catch(e){toast('保存失败: '+e.message,'er')}
     if(table==='invoices')renderT1();
   };
-  inp.onchange=()=>inp.blur();
+  inp.onchange=async()=>{
+    const val=inp.value;
+    try{
+      await api('PATCH',table,{[field]:val||null},`?id=eq.${id}`);
+      if(row)row[field]=val||null;
+      toast('已保存','ok');
+    }catch(e){toast('保存失败: '+e.message,'er')}
+    setTimeout(()=>{if(table==='invoices')renderT1()},100);
+  };
 }
 
 async function togIgn(id,cur){
@@ -717,28 +744,28 @@ function makeVinRow(r,i){
   const id=r.id||('new_'+i);
   return`<tr data-id="${id}" data-idx="${i}">
     <td style="text-align:center;color:var(--t3);padding:4px 6px;font-size:11px">${i+1}</td>
-    <td><input value="${r.invoice_no||''}" oninput="onVinCell(this,'invoice_no')" placeholder="发票号"></td>
-    <td><input value="${r.purchase_po||''}" oninput="onVinCell(this,'purchase_po')" placeholder="PO号"></td>
-    <td><input value="${r.vin||''}" oninput="onVinCell(this,'vin')" placeholder="车架号" style="font-weight:600"></td>
-    <td><input value="${r.model||''}" oninput="onVinCell(this,'model')" placeholder="型号/规格"></td>
-    <td><input type="number" value="${r.purchase_price_ex||''}" oninput="onVinPrice(this)" placeholder="0.00" style="text-align:right"></td>
-    <td><input type="number" value="${r.gst_rate||10}" oninput="onVinGST(this)" style="text-align:right;width:60px"></td>
+    <td><input data-f="invoice_no" value="${r.invoice_no||''}" oninput="onVinCell(this)" placeholder="发票号"></td>
+    <td><input data-f="purchase_po" value="${r.purchase_po||''}" oninput="onVinCell(this)" placeholder="PO号"></td>
+    <td><input data-f="vin" value="${r.vin||''}" oninput="onVinCell(this)" placeholder="车架号" style="font-weight:600"></td>
+    <td><input data-f="model" value="${r.model||''}" oninput="onVinCell(this)" placeholder="型号/规格"></td>
+    <td><input data-f="purchase_price_ex" type="number" value="${r.purchase_price_ex||''}" oninput="onVinPrice(this)" placeholder="0.00" style="text-align:right"></td>
+    <td><input data-f="gst_rate" type="number" value="${r.gst_rate||10}" oninput="onVinGST(this)" style="text-align:right;width:60px"></td>
     <td class="ro">${gst!==''?fmt(gst):'—'}</td>
     <td class="ro">${tot!==''?fmt(tot):'—'}</td>
-    <td><input value="${r.sale_inv_no||''}" oninput="onVinCell(this,'sale_inv_no')" placeholder="销售单号"></td>
-    <td><input type="number" value="${r.sale_price_ex||''}" oninput="onVinSale(this)" placeholder="0.00" style="text-align:right"></td>
+    <td><input data-f="sale_inv_no" value="${r.sale_inv_no||''}" oninput="onVinCell(this)" placeholder="销售单号"></td>
+    <td><input data-f="sale_price_ex" type="number" value="${r.sale_price_ex||''}" oninput="onVinSale(this)" placeholder="0.00" style="text-align:right"></td>
     <td class="ro" style="color:${prof>0?'var(--ok)':prof<0?'var(--er)':'var(--t3)'}">${prof!==''?fmt(prof):'—'}</td>
     <td class="ro" style="color:${rate>20?'var(--ok)':rate>0?'var(--wn)':'var(--er)'}">${rate!==''?rate+'%':'—'}</td>
-    <td><select onchange="onVinCell(this,'sale_status')">
+    <td><select data-f="sale_status" onchange="onVinCell(this)">
       <option value="">—</option>
       ${['全款','欠款','未售','租赁'].map(o=>`<option value="${o}"${r.sale_status===o?' selected':''}>${o}</option>`).join('')}
     </select></td>
-    <td><input value="${r.recon_no||''}" oninput="onVinCell(this,'recon_no')" placeholder="对账号" style="color:var(--wn)"></td>
-    <td><select onchange="onVinCell(this,'contract_type')">
+    <td><input data-f="recon_no" value="${r.recon_no||''}" oninput="onVinCell(this)" placeholder="对账号" style="color:var(--wn)"></td>
+    <td><select data-f="contract_type" onchange="onVinCell(this)">
       <option value="">—</option>
       ${['确认合同','自有'].map(o=>`<option value="${o}"${r.contract_type===o?' selected':''}>${o}</option>`).join('')}
     </select></td>
-    <td><select onchange="onVinCell(this,'payment_method')">
+    <td><select data-f="payment_method" onchange="onVinCell(this)">
       <option value="">—</option>
       ${['直接支付','贷款'].map(o=>`<option value="${o}"${r.payment_method===o?' selected':''}>${o}</option>`).join('')}
     </select></td>
@@ -747,12 +774,10 @@ function makeVinRow(r,i){
 }
 
 function getRowData(tr){
-  const inputs=tr.querySelectorAll('input,select');
-  const fields=['_num','invoice_no','purchase_po','vin','model','purchase_price_ex','gst_rate',null,null,'sale_inv_no','sale_price_ex',null,null,'sale_status','recon_no','contract_type','payment_method','_del'];
+  // Use data attributes on inputs for reliable field mapping
   const obj={};
-  inputs.forEach((inp,i)=>{
-    const f=fields[i];
-    if(f&&!f.startsWith('_'))obj[f]=inp.value.trim();
+  tr.querySelectorAll('input[data-f],select[data-f]').forEach(inp=>{
+    obj[inp.dataset.f]=inp.value.trim();
   });
   // Recalc
   const ex=parseFloat(obj.purchase_price_ex)||0;
@@ -763,7 +788,7 @@ function getRowData(tr){
   return obj;
 }
 
-function onVinCell(inp,field){
+function onVinCell(inp){
   const tr=inp.closest('tr');
   tr.style.background='#fffbeb';
 }
@@ -821,7 +846,10 @@ function handleRowPaste(e){
   const allRows=[...tbody.querySelectorAll('tr')];
   const startIdx=allRows.indexOf(tr);
   // Map clipboard cols to our input order: invoice_no, purchase_po, vin, model, purchase_price_ex, gst_rate, sale_inv_no, sale_price_ex, sale_status, recon_no, contract_type, payment_method
-  const inputOrder=[0,1,2,3,4,5,8,9,10,11,12,13]; // input index in row
+  // Clipboard cols map directly to input indices 0-11 (skip readonly cells)
+  // inputs[0]=invoice_no, [1]=purchase_po, [2]=vin, [3]=model, [4]=purchase_price_ex,
+  // [5]=gst_rate, [6]=sale_inv_no, [7]=sale_price_ex, [8]=sale_status, [9]=recon_no,
+  // [10]=contract_type, [11]=payment_method
   for(let li=0;li<lines.length;li++){
     const cols=lines[li].split('\t');
     let targetRow=allRows[startIdx+li];
@@ -832,16 +860,21 @@ function handleRowPaste(e){
     }
     if(!targetRow)continue;
     const inputs=[...targetRow.querySelectorAll('input,select')];
+    // Get only editable inputs (exclude readonly cells - they are td.ro not td>input)
+    const editableInputs=[...targetRow.querySelectorAll('td:not(.ro) input, td:not(.ro) select')];
+    // editableInputs order: invoice_no(0), purchase_po(1), vin(2), model(3), 
+    //   purchase_price_ex(4), gst_rate(5), sale_inv_no(6), sale_price_ex(7),
+    //   sale_status(8), recon_no(9), contract_type(10), payment_method(11)
     cols.forEach((val,ci)=>{
-      if(ci>=inputOrder.length)return;
-      const inp=inputs[inputOrder[ci]];
+      if(ci>=editableInputs.length)return;
+      const inp=editableInputs[ci];
       if(!inp)return;
-      inp.value=val.trim();
-      if(inp.tagName==='INPUT'&&(inp.type==='number'||!inp.type)){
-        inp.dispatchEvent(new Event('input'));
-      }
+      const v=val.trim();
+      inp.value=v;
     });
-    onVinPrice(targetRow.querySelector('td:nth-child(6) input'));
+    // Trigger recalc
+    const priceInp=targetRow.querySelector('td:nth-child(6) input');
+    if(priceInp)onVinPrice(priceInp);
     targetRow.style.background='#fffbeb';
   }
   toast(`粘贴了${lines.length}行数据，记得点「保存全部」`,'ok',4000);
@@ -865,7 +898,9 @@ async function saveAllVins(){
   let saved=0,errs=0;
   document.getElementById('t2status').textContent='保存中...';
   for(const tr of rows){
-    if(!tr.style.background&&tr.dataset.id&&!tr.dataset.id.startsWith('new_'))continue;
+    const isDirty=tr.style.background==='rgb(255, 251, 235)'||tr.style.background==='#fffbeb';
+    const isNew=!tr.dataset.id||tr.dataset.id.startsWith('new_');
+    if(!isDirty&&!isNew)continue;
     const data=getRowData(tr);
     if(!data.vin)continue;
     data.store=S.store;
