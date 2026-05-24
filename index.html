@@ -795,12 +795,24 @@ async function importPurchase(rows,keys){
     }
   }
 
-  // Batch insert new rows (50 per batch)
+  // Batch upsert new rows (50 per batch) - use upsert to avoid duplicate VIN errors
   let saved=0;
   for(let i=0;i<toInsert.length;i+=50){
     const batch=toInsert.slice(i,i+50);
-    try{await api('POST','vin_details',batch);saved+=batch.length}
-    catch(e){console.error('batch insert err',e)}
+    try{
+      const res=await fetch(`${SU}/rest/v1/vin_details`,{
+        method:'POST',
+        headers:{
+          'Content-Type':'application/json',
+          'apikey':SK,
+          'Authorization':`Bearer ${SK}`,
+          'Prefer':'resolution=merge-duplicates,return=minimal'
+        },
+        body:JSON.stringify(batch)
+      });
+      if(res.ok)saved+=batch.length;
+      else console.error('vin upsert err:',await res.text());
+    }catch(e){console.error('batch insert err',e)}
     showL(`导入中... ${Math.min(i+50,toInsert.length)}/${toInsert.length}`);
   }
 
@@ -986,14 +998,28 @@ async function importBizContracts(rows,keys){
       diffWithVin.push({po:poKey,bizTotal:total,vinTotal,diff:r2(total-vinTotal)});
   }
 
-  // Insert new
-  for(let i=0;i<toInsert.length;i+=50){
-    try{await api('POST','biz_contracts',toInsert.slice(i,i+50))}catch(e){
-      // Try one by one if batch fails (table might not exist)
-      for(const d of toInsert.slice(i,i+50))
-        try{await api('POST','biz_contracts',[d])}catch(e2){console.error(e2)}
-    }
+  // Upsert all (insert or update on conflict)
+  const allBiz=[...toInsert,...changedRows.map(c=>({...c.data}))];
+  for(let i=0;i<allBiz.length;i+=50){
+    const batch=allBiz.slice(i,i+50);
+    try{
+      const url=`${SU}/rest/v1/biz_contracts`;
+      const res=await fetch(url,{
+        method:'POST',
+        headers:{
+          'Content-Type':'application/json',
+          'apikey':SK,
+          'Authorization':`Bearer ${SK}`,
+          'Prefer':'resolution=merge-duplicates,return=minimal'
+        },
+        body:JSON.stringify(batch)
+      });
+      if(!res.ok)console.error('upsert err:',await res.text());
+    }catch(e){console.error(e)}
+    showL(`导入中... ${Math.min(i+50,allBiz.length)}/${allBiz.length}`);
   }
+  // Clear changedRows since we already upserted them
+  changedRows.length=0;
 
   const banner=document.getElementById('t3diffBanner');
   let bannerHtml='';
