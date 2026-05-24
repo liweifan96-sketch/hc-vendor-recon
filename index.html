@@ -201,8 +201,8 @@ tr.ign{opacity:.4;text-decoration:line-through}
   <div class="sh">
     <div><div class="st">发票明细</div><div class="ss2">VIN级别 · 采购价 vs 销售价 · 毛利</div></div>
     <div style="display:flex;gap:7px">
-      <button class="btn bs sm" onclick="addVinRow()">+ 新增行</button>
-      <button class="btn bs sm" onclick="saveAllVins()">💾 保存全部</button>
+      <button class="btn bs sm" onclick="document.getElementById('xlsF').click()">↑ 上传采购/销售Excel</button>
+      <input type="file" id="xlsF" accept=".xlsx,.xls" style="display:none" onchange="handleXlsUpload(this)">
       <button class="btn bs sm" onclick="expT2()">↓ 导出</button>
     </div>
   </div>
@@ -219,38 +219,21 @@ tr.ign{opacity:.4;text-decoration:line-through}
       <option value="gt20">≥20%</option><option value="neg">负数</option>
     </select>
   </div>
-  <div style="font-size:12px;color:var(--t3);margin-bottom:6px;font-family:var(--mn)">
-    提示：可直接在表格中编辑；从Excel/Lark复制整行后点击第一个单元格粘贴（Ctrl+V）可批量导入
-  </div>
-  <div class="et-wrap" id="t2wrap">
-    <table class="et" id="t2et">
+  <div id="t2diffBanner" style="margin-bottom:8px"></div>
+  <div class="tw">
+    <table id="t2t">
       <thead><tr>
-        <th style="width:36px">#</th>
-        <th style="min-width:110px">发票号</th>
-        <th style="min-width:90px">PO号</th>
-        <th style="min-width:120px">VIN</th>
-        <th style="min-width:130px">型号/规格</th>
-        <th class="num" style="min-width:110px">采购价(不含税)</th>
-        <th class="num" style="min-width:70px">GST率%</th>
-        <th class="num" style="min-width:90px">GST</th>
-        <th class="num" style="min-width:100px">采购合计</th>
-        <th style="min-width:110px">销售单号</th>
-        <th class="num" style="min-width:110px">销售价(不含税)</th>
-        <th class="num" style="min-width:80px">毛利</th>
-        <th class="num" style="min-width:70px">毛利率</th>
-        <th style="min-width:90px">销售状态</th>
-        <th style="min-width:100px">对账号</th>
-        <th style="min-width:90px">合同类别</th>
-        <th style="min-width:80px">付款方式</th>
-        <th style="min-width:50px">删除</th>
+        <th>发票号</th><th>PO号</th><th>VIN</th><th>型号/规格</th>
+        <th class="num" style="border-left:2px solid var(--b1)">采购价(不含税)</th>
+        <th class="num">GST率%</th><th class="num">GST</th><th class="num">采购合计</th>
+        <th style="border-left:2px solid var(--b1)">销售单号</th>
+        <th class="num">销售价(不含税)</th>
+        <th class="num">毛利</th><th class="num">毛利率</th><th>销售状态</th>
+        <th style="border-left:2px solid var(--b1)">对账号</th>
+        <th>合同类别</th><th>付款方式</th>
       </tr></thead>
-      <tbody id="t2b"></tbody>
+      <tbody id="t2b"><tr><td colspan="16" style="text-align:center;padding:32px;color:var(--t3)">请上传采购录入表Excel</td></tr></tbody>
     </table>
-  </div>
-  <div style="margin-top:8px;display:flex;align-items:center;gap:8px">
-    <button class="btn bs sm" onclick="addVinRow()">+ 新增行</button>
-    <button class="btn bp sm" onclick="saveAllVins()">💾 保存全部修改</button>
-    <span style="font-size:11px;color:var(--t3);font-family:var(--mn)" id="t2status"></span>
   </div>
 </div>
 
@@ -616,6 +599,7 @@ function ecText(id,field,td,table){
       toast('已保存','ok');
     }catch(e){toast('保存失败: '+e.message,'er');console.error(e)}
     if(table==='invoices')renderT1();
+    else renderT2();
     renderT3();
   };
   inp.onkeydown=e=>{if(e.key==='Enter')inp.blur()};
@@ -624,38 +608,33 @@ function ecText(id,field,td,table){
 function ecSel(id,field,td,table,opts){
   const row=getRow(table,id);
   const cur=row?(row[field]||''):'';
-  const wrap=document.createElement('div');
-  wrap.style.cssText='position:relative;display:inline-block;min-width:90px';
+  // Remove any existing dropdowns
+  document.querySelectorAll('.ec-dropdown').forEach(d=>d.remove());
   const sel=document.createElement('select');
   sel.className='ci';
-  sel.style.cssText='width:100%;min-width:90px;padding:4px 6px;font-size:12px;border:1px solid var(--ac);border-radius:4px;background:#fff;cursor:pointer';
+  sel.style.cssText='padding:4px 8px;font-size:12px;border:1px solid var(--ac);border-radius:4px;background:#fff;cursor:pointer;min-width:90px;font-family:var(--bd)';
   sel.innerHTML='<option value="">—</option>'+opts.map(o=>`<option value="${o}"${o===cur?' selected':''}>${o}</option>`).join('');
-  wrap.appendChild(sel);
-  td.innerHTML='';td.appendChild(wrap);
-  // Use size to show dropdown always visible
-  sel.size=opts.length+1;
-  sel.style.cssText='width:100%;min-width:100px;font-size:12px;border:1px solid var(--ac);border-radius:4px;background:#fff;cursor:pointer;position:absolute;z-index:999;box-shadow:0 4px 12px rgba(0,0,0,.15)';
+  td.innerHTML='';td.appendChild(sel);sel.focus();
   sel.onchange=async()=>{
     const val=sel.value;
-    sel.size=1;
     try{
       await api('PATCH',table,{[field]:val||null},`?id=eq.${id}`);
       if(row){
         row[field]=val||null;
         if(table==='invoices'&&field==='recon_no'&&val){
           const vinRows=S.vins.filter(v=>v.invoice_no===row.invoice_no);
-          for(const v of vinRows){
-            await api('PATCH','vin_details',{recon_no:val},`?id=eq.${v.id}`);
-            v.recon_no=val;
-          }
+          for(const v of vinRows){await api('PATCH','vin_details',{recon_no:val},`?id=eq.${v.id}`);v.recon_no=val}
         }
       }
       toast('已保存','ok');
     }catch(e){toast('保存失败: '+e.message,'er')}
     if(table==='invoices')renderT1();
+    else renderT2();
     renderT3();
   };
+  sel.onblur=()=>setTimeout(()=>{if(table==='invoices')renderT1();else renderT2()},200);
 }
+
 
 function ecDate(id,field,td,table){
   const row=getRow(table,id);
@@ -674,7 +653,7 @@ function ecDate(id,field,td,table){
       if(row)row[field]=val||null;
       toast('已保存','ok');
     }catch(e){toast('保存失败: '+e.message,'er')}
-    if(table==='invoices')renderT1();
+    if(table==='invoices')renderT1();else renderT2();
   };
   inp.onchange=async()=>{
     const val=inp.value;
@@ -683,7 +662,7 @@ function ecDate(id,field,td,table){
       if(row)row[field]=val||null;
       toast('已保存','ok');
     }catch(e){toast('保存失败: '+e.message,'er')}
-    setTimeout(()=>{if(table==='invoices')renderT1()},100);
+    setTimeout(()=>{if(table==='invoices')renderT1();else renderT2()},100);
   };
 }
 
@@ -695,239 +674,159 @@ async function togIgn(id,cur){
   renderT1();updStats();
 }
 
-// ── T2: EDITABLE VIN TABLE ──
-let t2rows=[];
+// ── T2: VIN TABLE ──
+let t2Filter={q:'',st:'',pr:''};
+
+function ft2q(v){t2Filter.q=v;renderT2()}
+function ft2st(v){t2Filter.st=v;renderT2()}
+function ft2pr(v){t2Filter.pr=v;renderT2()}
 
 function renderT2(){
-  // Build from S.vins
-  t2rows=S.vins.map(v=>({...v,_dirty:false}));
-  // Apply filters
-  const{q,st,pr}=S.f2;
-  let rows=t2rows;
+  let rows=S.vins;
+  const{q,st,pr}=t2Filter;
   if(q){const lq=q.toLowerCase();rows=rows.filter(r=>(r.vin||'').toLowerCase().includes(lq)||(r.invoice_no||'').toLowerCase().includes(lq)||(r.sale_inv_no||'').toLowerCase().includes(lq))}
   if(st)rows=rows.filter(r=>r.sale_status===st);
-  if(pr){
-    rows=rows.filter(r=>{
-      const rt=r.gross_profit_rate;
-      if(pr==='neg')return rt<0;
-      if(pr==='lt10')return rt>=0&&rt<10;
-      if(pr==='lt20')return rt>=0&&rt<20;
-      if(pr==='gt20')return rt>=20;
-      return true;
-    });
-  }
-  buildT2Table(rows);
+  if(pr){rows=rows.filter(r=>{
+    const rt=r.gross_profit_rate;
+    if(pr==='neg')return rt<0;if(pr==='lt10')return rt>=0&&rt<10;
+    if(pr==='lt20')return rt>=0&&rt<20;if(pr==='gt20')return rt>=20;return true;
+  })}
+  const ssBadge={全款:'<span class="bd b-ok">全款</span>',欠款:'<span class="bd b-wn">欠款</span>',未售:'<span class="bd b-mu">未售</span>',租赁:'<span class="bd b-ac">租赁</span>'};
+  document.getElementById('t2b').innerHTML=rows.length?rows.map(r=>`<tr>
+    <td class="mono ec" style="font-size:11px;color:var(--ac);cursor:pointer" onclick="ecText('${r.id}','invoice_no',this,'vin_details')">${r.invoice_no||'<span style="color:var(--t3)">—</span>'}</td>
+    <td class="mono ec" style="font-size:11px;cursor:pointer" onclick="ecText('${r.id}','purchase_po',this,'vin_details')">${r.purchase_po||'<span style="color:var(--t3)">—</span>'}</td>
+    <td class="mono ec" style="font-weight:600;cursor:pointer" onclick="ecText('${r.id}','vin',this,'vin_details')">${r.vin||'—'}</td>
+    <td class="ec" style="font-size:12px;color:var(--t2);cursor:pointer" onclick="ecText('${r.id}','model',this,'vin_details')">${r.model||'—'}</td>
+    <td class="num ec" style="border-left:2px solid var(--b1);cursor:pointer" onclick="ecText('${r.id}','purchase_price_ex',this,'vin_details')">${fmt(r.purchase_price_ex)}</td>
+    <td class="num ec" style="cursor:pointer" onclick="ecText('${r.id}','gst_rate',this,'vin_details')">${r.gst_rate||10}%</td>
+    <td class="num" style="color:var(--t3);font-size:11px">${fmt(r.purchase_gst)}</td>
+    <td class="num" style="font-weight:600">${fmt(r.purchase_total)}</td>
+    <td class="mono ec" style="border-left:2px solid var(--b1);font-size:11px;color:var(--wn);cursor:pointer" onclick="ecText('${r.id}','sale_inv_no',this,'vin_details')">${r.sale_inv_no||'<span style="color:var(--t3)">—</span>'}</td>
+    <td class="num ec" style="cursor:pointer" onclick="ecText('${r.id}','sale_price_ex',this,'vin_details')">${fmt(r.sale_price_ex)}</td>
+    <td class="num" style="color:${r.gross_profit>0?'var(--ok)':r.gross_profit<0?'var(--er)':'var(--t3)'};font-weight:600">${r.gross_profit!=null?fmt(r.gross_profit):'—'}</td>
+    <td class="num" style="color:${r.gross_profit_rate>20?'var(--ok)':r.gross_profit_rate>0?'var(--wn)':'var(--er)'}">${r.gross_profit_rate!=null?r.gross_profit_rate+'%':'—'}</td>
+    <td class="ec" style="cursor:pointer" onclick="ecSel('${r.id}','sale_status',this,'vin_details',['全款','欠款','未售','租赁'])">${ssBadge[r.sale_status]||'<span style="color:var(--t3);font-size:12px">点击设置</span>'}</td>
+    <td class="mono ec" style="border-left:2px solid var(--b1);font-size:12px;color:var(--wn);cursor:pointer" onclick="ecText('${r.id}','recon_no',this,'vin_details')">${r.recon_no||'<span style="color:var(--t3)">—</span>'}</td>
+    <td class="ec" style="cursor:pointer" onclick="ecSel('${r.id}','contract_type',this,'vin_details',['确认合同','自有'])">${r.contract_type?`<span class="bd b-mu">${r.contract_type}</span>`:'<span style="color:var(--t3);font-size:12px">点击设置</span>'}</td>
+    <td class="ec" style="cursor:pointer" onclick="ecSel('${r.id}','payment_method',this,'vin_details',['直接支付','贷款'])">${r.payment_method?`<span class="bd ${r.payment_method==='直接支付'?'b-ok':'b-ac'}">${r.payment_method}</span>`:'<span style="color:var(--t3);font-size:12px">点击设置</span>'}</td>
+  </tr>`).join(''):'<tr><td colspan="16" style="text-align:center;padding:32px;color:var(--t3)">暂无VIN数据，请上传采购录入表Excel</td></tr>';
 }
 
-function ft2q(v){S.f2.q=v;renderT2()}
-function ft2st(v){S.f2.st=v;renderT2()}
-function ft2pr(v){S.f2.pr=v;renderT2()}
-
-function buildT2Table(rows){
-  const tbody=document.getElementById('t2b');
-  tbody.innerHTML=rows.map((r,i)=>makeVinRow(r,i)).join('');
-  // Attach paste handler to first cell of each row
-  tbody.querySelectorAll('tr').forEach(tr=>{
-    tr.addEventListener('paste',handleRowPaste);
-  });
+// ── EXCEL UPLOAD ──
+async function handleXlsUpload(input){
+  const file=input.files[0];
+  if(!file)return;
+  showL('读取Excel...');
+  try{
+    const ab=await file.arrayBuffer();
+    const wb=XLSX.read(ab,{type:'array'});
+    const ws=wb.Sheets[wb.SheetNames[0]];
+    const rows=XLSX.utils.sheet_to_json(ws,{defval:''});
+    if(!rows.length){hideL();toast('Excel无数据','wn');return}
+    const keys=Object.keys(rows[0]);
+    // Detect type by columns
+    const isPurchase=keys.some(k=>k.includes('车架号'))||keys.some(k=>k.includes('VIN')||k==='vin');
+    const isSales=keys.some(k=>k.includes('唯一销售单号')||k.includes('销售单号'));
+    showL(`处理${rows.length}行数据...`);
+    if(isPurchase&&!isSales)await importPurchase(rows,keys);
+    else if(isSales)await importSales(rows,keys);
+    else{hideL();toast('未能识别Excel类型，请确认列名包含"车架号"或"唯一销售单号"','er');return}
+    hideL();input.value='';
+    await loadData();
+  }catch(e){hideL();toast('读取失败: '+e.message,'er');console.error(e)}
 }
 
-function makeVinRow(r,i){
-  const calcGST=se=>r2((parseFloat(se)||0)*(parseFloat(r.gst_rate||10)/100));
-  const calcTotal=se=>{const ex=parseFloat(se)||0;const g=r2(ex*(parseFloat(r.gst_rate||10)/100));return r2(ex+g)};
-  const calcProfit=(se,pur)=>{const s=parseFloat(se)||0,p=parseFloat(pur)||0;return(s&&p)?r2(s-p):''};
-  const calcRate=(se,pur)=>{const s=parseFloat(se)||0,p=parseFloat(pur)||0;return(s&&p)?Math.round((s-p)/s*100):''};
-  const gst=r.purchase_gst!=null?r.purchase_gst:calcGST(r.purchase_price_ex);
-  const tot=r.purchase_total!=null?r.purchase_total:calcTotal(r.purchase_price_ex);
-  const prof=r.gross_profit!=null?r.gross_profit:calcProfit(r.sale_price_ex,r.purchase_price_ex);
-  const rate=r.gross_profit_rate!=null?r.gross_profit_rate:calcRate(r.sale_price_ex,r.purchase_price_ex);
-  const id=r.id||('new_'+i);
-  return`<tr data-id="${id}" data-idx="${i}">
-    <td style="text-align:center;color:var(--t3);padding:4px 6px;font-size:11px">${i+1}</td>
-    <td><input data-f="invoice_no" value="${r.invoice_no||''}" oninput="onVinCell(this)" placeholder="发票号"></td>
-    <td><input data-f="purchase_po" value="${r.purchase_po||''}" oninput="onVinCell(this)" placeholder="PO号"></td>
-    <td><input data-f="vin" value="${r.vin||''}" oninput="onVinCell(this)" placeholder="车架号" style="font-weight:600"></td>
-    <td><input data-f="model" value="${r.model||''}" oninput="onVinCell(this)" placeholder="型号/规格"></td>
-    <td><input data-f="purchase_price_ex" type="number" value="${r.purchase_price_ex||''}" oninput="onVinPrice(this)" placeholder="0.00" style="text-align:right"></td>
-    <td><input data-f="gst_rate" type="number" value="${r.gst_rate||10}" oninput="onVinGST(this)" style="text-align:right;width:60px"></td>
-    <td class="ro">${gst!==''?fmt(gst):'—'}</td>
-    <td class="ro">${tot!==''?fmt(tot):'—'}</td>
-    <td><input data-f="sale_inv_no" value="${r.sale_inv_no||''}" oninput="onVinCell(this)" placeholder="销售单号"></td>
-    <td><input data-f="sale_price_ex" type="number" value="${r.sale_price_ex||''}" oninput="onVinSale(this)" placeholder="0.00" style="text-align:right"></td>
-    <td class="ro" style="color:${prof>0?'var(--ok)':prof<0?'var(--er)':'var(--t3)'}">${prof!==''?fmt(prof):'—'}</td>
-    <td class="ro" style="color:${rate>20?'var(--ok)':rate>0?'var(--wn)':'var(--er)'}">${rate!==''?rate+'%':'—'}</td>
-    <td><select data-f="sale_status" onchange="onVinCell(this)">
-      <option value="">—</option>
-      ${['全款','欠款','未售','租赁'].map(o=>`<option value="${o}"${r.sale_status===o?' selected':''}>${o}</option>`).join('')}
-    </select></td>
-    <td><input data-f="recon_no" value="${r.recon_no||''}" oninput="onVinCell(this)" placeholder="对账号" style="color:var(--wn)"></td>
-    <td><select data-f="contract_type" onchange="onVinCell(this)">
-      <option value="">—</option>
-      ${['确认合同','自有'].map(o=>`<option value="${o}"${r.contract_type===o?' selected':''}>${o}</option>`).join('')}
-    </select></td>
-    <td><select data-f="payment_method" onchange="onVinCell(this)">
-      <option value="">—</option>
-      ${['直接支付','贷款'].map(o=>`<option value="${o}"${r.payment_method===o?' selected':''}>${o}</option>`).join('')}
-    </select></td>
-    <td style="text-align:center"><button class="btn bs sm" style="color:var(--er);padding:2px 7px" onclick="delVinRow(this,'${id}')">✕</button></td>
-  </tr>`;
-}
+async function importPurchase(rows,keys){
+  const vinCol=keys.find(k=>k.includes('车架号')||k==='vin')||'';
+  const priceCol=keys.find(k=>k==='Price'||k==='价格'||k.toLowerCase()==='price')||'';
+  const cnCol=keys.find(k=>k.includes('合同号')&&!k.includes('已付'))||'';
+  const codeCol=keys.find(k=>k.includes('DJJ')||k.includes('Code')||k.includes('发票号'))||'';
+  const modelCol=keys.find(k=>k.includes('适配机型')||k.includes('规格')||k.includes('型号'))||'';
+  const subCol=keys.find(k=>k.includes('Subtotal')||k.includes('小计'))||priceCol;
 
-function getRowData(tr){
-  // Use data attributes on inputs for reliable field mapping
-  const obj={};
-  tr.querySelectorAll('input[data-f],select[data-f]').forEach(inp=>{
-    obj[inp.dataset.f]=inp.value.trim();
-  });
-  // Recalc
-  const ex=parseFloat(obj.purchase_price_ex)||0;
-  const gr=parseFloat(obj.gst_rate)||10;
-  if(ex){obj.purchase_gst=r2(ex*gr/100);obj.purchase_total=r2(ex+obj.purchase_gst)}
-  const se=parseFloat(obj.sale_price_ex)||0;
-  if(ex&&se){obj.gross_profit=r2(se-ex);obj.gross_profit_rate=se>0?Math.round(obj.gross_profit/se*100):0}
-  return obj;
-}
+  // Get existing VINs to detect diffs
+  const existing=await api('GET','vin_details',null,`?store=eq.${S.store}&select=id,vin,purchase_price_ex,invoice_no,purchase_po`)||[];
+  const exMap=Object.fromEntries(existing.map(e=>[e.vin,e]));
 
-function onVinCell(inp){
-  const tr=inp.closest('tr');
-  tr.style.background='#fffbeb';
-}
-
-function onVinPrice(inp){
-  const tr=inp.closest('tr');
-  const ex=parseFloat(inp.value)||0;
-  const gstR=parseFloat(tr.querySelector('td:nth-child(7) input').value)||10;
-  const gst=r2(ex*gstR/100);
-  const tot=r2(ex+gst);
-  tr.querySelector('td:nth-child(8)').textContent=ex?fmt(gst):'—';
-  tr.querySelector('td:nth-child(9)').textContent=ex?fmt(tot):'—';
-  updateProfit(tr);
-  tr.style.background='#fffbeb';
-}
-
-function onVinGST(inp){
-  const tr=inp.closest('tr');
-  const ex=parseFloat(tr.querySelector('td:nth-child(6) input').value)||0;
-  const gstR=parseFloat(inp.value)||10;
-  const gst=r2(ex*gstR/100);
-  const tot=r2(ex+gst);
-  tr.querySelector('td:nth-child(8)').textContent=ex?fmt(gst):'—';
-  tr.querySelector('td:nth-child(9)').textContent=ex?fmt(tot):'—';
-  tr.style.background='#fffbeb';
-}
-
-function onVinSale(inp){
-  const tr=inp.closest('tr');
-  updateProfit(tr);
-  tr.style.background='#fffbeb';
-}
-
-function updateProfit(tr){
-  const ex=parseFloat(tr.querySelector('td:nth-child(6) input').value)||0;
-  const se=parseFloat(tr.querySelector('td:nth-child(11) input').value)||0;
-  const prof=r2(se-ex);
-  const rate=se>0?Math.round(prof/se*100):0;
-  const pc=tr.querySelector('td:nth-child(12)');
-  const rc=tr.querySelector('td:nth-child(13)');
-  pc.textContent=(ex&&se)?fmt(prof):'—';
-  pc.style.color=prof>0?'var(--ok)':prof<0?'var(--er)':'var(--t3)';
-  rc.textContent=(ex&&se)?rate+'%':'—';
-  rc.style.color=rate>20?'var(--ok)':rate>0?'var(--wn)':'var(--er)';
-}
-
-// PASTE HANDLER - paste row data from Excel/Lark
-function handleRowPaste(e){
-  e.preventDefault();
-  const clipText=e.clipboardData.getData('text/plain');
-  if(!clipText.trim())return;
-  const lines=clipText.split(/\r?\n/).filter(l=>l.trim());
-  const tr=e.currentTarget;
-  const tbody=document.getElementById('t2b');
-  const allRows=[...tbody.querySelectorAll('tr')];
-  const startIdx=allRows.indexOf(tr);
-  // Map clipboard cols to our input order: invoice_no, purchase_po, vin, model, purchase_price_ex, gst_rate, sale_inv_no, sale_price_ex, sale_status, recon_no, contract_type, payment_method
-  // Clipboard cols map directly to input indices 0-11 (skip readonly cells)
-  // inputs[0]=invoice_no, [1]=purchase_po, [2]=vin, [3]=model, [4]=purchase_price_ex,
-  // [5]=gst_rate, [6]=sale_inv_no, [7]=sale_price_ex, [8]=sale_status, [9]=recon_no,
-  // [10]=contract_type, [11]=payment_method
-  for(let li=0;li<lines.length;li++){
-    const cols=lines[li].split('\t');
-    let targetRow=allRows[startIdx+li];
-    if(!targetRow){
-      // Add new row
-      addVinRow();
-      targetRow=[...tbody.querySelectorAll('tr')][startIdx+li];
+  const newRows=[],changedRows=[],existingRows=[];
+  for(const row of rows){
+    const vin=(row[vinCol]||'').toString().trim();
+    if(!vin)continue;
+    const price=parseFloat((row[subCol]||row[priceCol]||'0').toString().replace(/[$,]/g,''))||0;
+    const gst=r2(price*0.1);
+    const invNo=(row[codeCol]||'').toString().trim();
+    const po=(row[cnCol]||'').toString().trim();
+    const model=(row[modelCol]||'').toString().trim()||null;
+    const vinData={store:S.store,vin,invoice_no:invNo||null,purchase_po:po||null,model,
+      purchase_price_ex:price||null,purchase_gst:price?gst:null,purchase_total:price?r2(price+gst):null,gst_rate:10};
+    if(exMap[vin]){
+      const ex=exMap[vin];
+      const changed=Math.abs((Number(ex.purchase_price_ex)||0)-price)>0.01||(ex.invoice_no||'')!==invNo||(ex.purchase_po||'')!==po;
+      if(changed)changedRows.push({data:vinData,old:ex,id:ex.id});
+      else existingRows.push(vin);
+    }else{
+      newRows.push(vinData);
     }
-    if(!targetRow)continue;
-    const inputs=[...targetRow.querySelectorAll('input,select')];
-    // Get only editable inputs (exclude readonly cells - they are td.ro not td>input)
-    const editableInputs=[...targetRow.querySelectorAll('td:not(.ro) input, td:not(.ro) select')];
-    // editableInputs order: invoice_no(0), purchase_po(1), vin(2), model(3), 
-    //   purchase_price_ex(4), gst_rate(5), sale_inv_no(6), sale_price_ex(7),
-    //   sale_status(8), recon_no(9), contract_type(10), payment_method(11)
-    cols.forEach((val,ci)=>{
-      if(ci>=editableInputs.length)return;
-      const inp=editableInputs[ci];
-      if(!inp)return;
-      const v=val.trim();
-      inp.value=v;
-    });
-    // Trigger recalc
-    const priceInp=targetRow.querySelector('td:nth-child(6) input');
-    if(priceInp)onVinPrice(priceInp);
-    targetRow.style.background='#fffbeb';
   }
-  toast(`粘贴了${lines.length}行数据，记得点「保存全部」`,'ok',4000);
+
+  // Show diff banner
+  const banner=document.getElementById('t2diffBanner');
+  if(changedRows.length){
+    banner.innerHTML=`<div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:12px 14px;font-size:12px;color:#92400e">
+      <strong>⚠ 发现${changedRows.length}条数据有变化：</strong>
+      <div style="margin-top:6px;max-height:120px;overflow-y:auto">
+        ${changedRows.map(c=>`<div style="font-family:var(--mn);margin-bottom:2px">VIN ${c.old.vin}：采购价 ${c.old.purchase_price_ex||'空'} → ${c.data.purchase_price_ex}</div>`).join('')}
+      </div>
+      <div style="margin-top:8px;display:flex;gap:8px">
+        <button class="btn sm" style="background:#f59e0b;color:#fff" onclick="applyDiffs(${JSON.stringify(changedRows).replace(/"/g,'&quot;')})">全部覆盖更新</button>
+        <button class="btn bs sm" onclick="this.closest('div').parentElement.innerHTML=''">忽略差异</button>
+      </div>
+    </div>`;
+  }else{banner.innerHTML=''}
+
+  // Insert new rows
+  let saved=0;
+  for(const d of newRows){
+    try{await api('POST','vin_details',[d]);saved++}catch(e){console.error(e)}
+  }
+  toast(`采购表导入：${saved}条新增${changedRows.length?'，'+changedRows.length+'条有变化需确认':''}${existingRows.length?'，'+existingRows.length+'条已存在无变化':''}`,'ok',5000);
 }
 
-function addVinRow(){
-  const tbody=document.getElementById('t2b');
-  const idx=tbody.querySelectorAll('tr').length;
-  const emptyRow={invoice_no:'',purchase_po:'',vin:'',model:'',purchase_price_ex:'',gst_rate:10,purchase_gst:null,purchase_total:null,sale_inv_no:'',sale_price_ex:'',gross_profit:null,gross_profit_rate:null,sale_status:'',recon_no:'',contract_type:'',payment_method:''};
-  const tr=document.createElement('tr');
-  tr.innerHTML=makeVinRow(emptyRow,idx).replace(/<tr[^>]*>/,'').replace(/<\/tr>/,'');
-  tr.dataset.id='new_'+Date.now();
-  tr.addEventListener('paste',handleRowPaste);
-  tbody.appendChild(tr);
-  tr.querySelector('input').focus();
-}
-
-async function saveAllVins(){
-  const tbody=document.getElementById('t2b');
-  const rows=[...tbody.querySelectorAll('tr')];
-  let saved=0,errs=0;
-  document.getElementById('t2status').textContent='保存中...';
-  for(const tr of rows){
-    const isDirty=tr.style.background==='rgb(255, 251, 235)'||tr.style.background==='#fffbeb';
-    const isNew=!tr.dataset.id||tr.dataset.id.startsWith('new_');
-    if(!isDirty&&!isNew)continue;
-    const data=getRowData(tr);
-    if(!data.vin)continue;
-    data.store=S.store;
-    try{
-      const id=tr.dataset.id;
-      if(id&&!id.startsWith('new_')){
-        await api('PATCH','vin_details',data,`?id=eq.${id}`);
-      }else{
-        const res=await api('POST','vin_details',[data]);
-        if(res&&res[0])tr.dataset.id=res[0].id;
-      }
-      tr.style.background='';
-      saved++;
-    }catch(e){console.error(e);errs++}
+async function applyDiffs(changedRows){
+  showL('更新差异数据...');
+  for(const c of changedRows){
+    try{await api('PATCH','vin_details',c.data,`?id=eq.${c.id}`)}catch(e){console.error(e)}
   }
-  document.getElementById('t2status').textContent=errs?`${saved}行已保存，${errs}行失败`:`${saved}行已保存`;
-  toast(`保存完成：${saved}行`,'ok');
+  hideL();toast('差异数据已更新','ok');
+  document.getElementById('t2diffBanner').innerHTML='';
   await loadData();
 }
 
-async function delVinRow(btn,id){
-  const tr=btn.closest('tr');
-  if(id&&!id.startsWith('new_')){
-    try{await api('DELETE','vin_details',null,`?id=eq.${id}`)}catch(e){console.error(e)}
+async function importSales(rows,keys){
+  const vinCol=keys.find(k=>k.includes('车架号')||k==='vin')||'';
+  const invCol=keys.find(k=>k.includes('唯一销售单号')||k.includes('销售单号'))||'';
+  const priceCol=keys.find(k=>k.includes('not including GST')||k.includes('不含税')||k.includes('销售价'))||'';
+  const statusCol=keys.find(k=>k.includes('出库状态')||k.includes('状态'))||'';
+  let count=0;
+  for(const row of rows){
+    const vin=(row[vinCol]||'').toString().trim();
+    if(!vin)continue;
+    const saleEx=parseFloat((row[priceCol]||'0').toString().replace(/[$,]/g,''))||0;
+    const status=(row[statusCol]||'').toString().trim();
+    const saleInv=(row[invCol]||'').toString().trim();
+    const updates={sale_inv_no:saleInv||null,sale_price_ex:saleEx||null,
+      sale_status:status.includes('已出库')?'全款':status.includes('未出库')?'未售':(status||null)};
+    const vr=S.vins.find(r=>r.vin===vin);
+    if(vr&&saleEx&&vr.purchase_price_ex){
+      updates.gross_profit=r2(saleEx-Number(vr.purchase_price_ex));
+      updates.gross_profit_rate=saleEx>0?Math.round(updates.gross_profit/saleEx*100):0;
+    }
+    try{
+      const ex=await api('GET','vin_details',null,`?vin=eq.${vin}&store=eq.${S.store}`);
+      if(ex&&ex.length){await api('PATCH','vin_details',updates,`?vin=eq.${vin}&store=eq.${S.store}`);count++}
+    }catch(e){console.error(e)}
   }
-  tr.remove();
-  toast('已删除','ok');
+  toast(`销售明细导入：${count}条更新`,'ok');
 }
 
 // ── RENDER T3 ──
@@ -983,20 +882,29 @@ function renderT3(){
     const cTotal=poVinTotal[po]||null;
     const recons=[...d.reconNos];
 
-    // Get unique paid slots from Statement invoices (up to 4 recon_no+date combos)
-    const paidSlots=[];
-    const seen=new Set();
-    d.invs.forEach(inv=>{
-      if(inv.recon_no&&!seen.has(inv.recon_no)){
-        seen.add(inv.recon_no);
-        const rc=S.recons.find(r=>r.recon_no===inv.recon_no);
-        paidSlots.push({
-          recon_no:inv.recon_no,
-          date:inv.payment_date||'',
-          amount:reconAmt[inv.recon_no]||0,
-          method:rc?rc.payment_method:''
-        });
-      }
+    // Paid slots: each unique recon_no = one payment batch
+    // Amount = sum of Balance AUD of all invoices in this PO with that recon_no
+    // Sort by payment_date so paid1 = earliest, paid2 = next, etc.
+    const reconGroups={};
+    d.invs.filter(inv=>inv.recon_no).forEach(inv=>{
+      const rn=inv.recon_no;
+      if(!reconGroups[rn])reconGroups[rn]={
+        recon_no:rn,
+        amount:0,
+        date:inv.payment_date||'',
+        method:inv.payment_method||''
+      };
+      reconGroups[rn].amount=r2(reconGroups[rn].amount+Number(inv.balance_aud));
+      // Use earliest non-empty date
+      if(inv.payment_date&&(!reconGroups[rn].date||inv.payment_date<reconGroups[rn].date))
+        reconGroups[rn].date=inv.payment_date;
+    });
+    // Sort by payment date (earliest first = paid1)
+    const paidSlots=Object.values(reconGroups).sort((a,b)=>{
+      if(!a.date&&!b.date)return 0;
+      if(!a.date)return 1;
+      if(!b.date)return -1;
+      return a.date<b.date?-1:a.date>b.date?1:0;
     });
 
     const paidTotal=paidSlots.reduce((s,p)=>s+p.amount,0);
