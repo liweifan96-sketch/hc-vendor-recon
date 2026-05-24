@@ -958,39 +958,70 @@ async function handleBizUpload(input){
 }
 
 async function importBizContracts(rows,keys){
-  const poCol=keys.find(k=>k.includes('合同号')||k.includes('PO')||k.toLowerCase()==='po')||keys[0];
-  const totCol=keys.find(k=>k.includes('合同总金额')||k.includes('总金额')||k.includes('合同金额'))||'';
-  const p=n=>parseFloat((n||'0').toString().replace(/[$,]/g,''))||0;
+  // Column mapping for actual Lark export format:
+  // 合同号(col0), 总金额(col8), 已付金额1(col9), 支付时间1(col10),
+  // 已付金额2(col11), 支付时间2(col12), 已付金额3(col13), 支付时间3(col14),
+  // 已付金额4(col15), 支付时间4(col16)
+  const poCol=keys.find(k=>k==='合同号')||keys[0];
+  const totCol=keys.find(k=>k==='总金额')||'';
+  const p=n=>{
+    if(n==null||n==='')return 0;
+    return parseFloat(n.toString().replace(/[$,]/g,'').trim())||0;
+  };
+  const fmtDate=d=>{
+    if(!d)return null;
+    // Handle datetime objects from Excel
+    if(d instanceof Date)return d.toISOString().split('T')[0];
+    const s=d.toString().trim();
+    if(!s)return null;
+    // "2026-02-05 00:00:00" → "2026-02-05"
+    return s.split(' ')[0]||s;
+  };
 
-  // Get existing biz contracts for diff
+  // Find paid amount/date columns (up to 4)
+  const paidCols=[];
+  for(let i=1;i<=4;i++){
+    const amtCol=keys.find(k=>k===`已付金额${i}`||k===`已支付金额${i}`)||'';
+    const dateCol=keys.find(k=>k===`支付时间${i}`)||'';
+    paidCols.push({amtCol,dateCol});
+  }
+
+  // Get existing for diff check
   let existing=[];
   try{existing=await api('GET','biz_contracts',null,`?store=eq.${S.store}&select=id,po_no,contract_total`)||[]}catch(e){}
   const exMap=Object.fromEntries(existing.map(e=>[e.po_no,e]));
 
-  // Also get VIN totals by PO for comparison
+  // VIN totals by PO for comparison
   const vinByPO={};
   S.vins.forEach(v=>{
     if(!v.purchase_po)return;
     const po=xPO(v.purchase_po);
-    if(!vinByPO[po])vinByPO[po]=0;
-    vinByPO[po]=r2(vinByPO[po]+(Number(v.purchase_total)||0));
+    vinByPO[po]=(vinByPO[po]||0)+Number(v.purchase_total||0);
   });
 
-  const toInsert=[],changedRows=[],diffWithVin=[];
+  const toUpsert=[],diffWithVin=[];
+  let skipped=0;
+
   for(const row of rows){
     const po=(row[poCol]||'').toString().trim();
     if(!po)continue;
-    const total=p(row[totCol]);
     const poKey=xPO(po);
-    const bizData={store:S.store,po_no:poKey,contract_total:total||null};
+    const total=p(row[totCol]);
 
-    if(exMap[poKey]){
-      const ex=exMap[poKey];
-      if(Math.abs((Number(ex.contract_total)||0)-total)>0.01)
-        changedRows.push({data:bizData,old:ex,id:ex.id,po:poKey,total,oldTotal:ex.contract_total});
-    }else{
-      toInsert.push(bizData);
-    }
+    const bizData={
+      store:S.store,
+      po_no:poKey,
+      contract_total:total||null,
+      paid1_amount:p(row[paidCols[0].amtCol])||null,
+      paid1_date:fmtDate(row[paidCols[0].dateCol]),
+      paid2_amount:p(row[paidCols[1].amtCol])||null,
+      paid2_date:fmtDate(row[paidCols[1].dateCol]),
+      paid3_amount:p(row[paidCols[2].amtCol])||null,
+      paid3_date:fmtDate(row[paidCols[2].dateCol]),
+      paid4_amount:p(row[paidCols[3].amtCol])||null,
+      paid4_date:fmtDate(row[paidCols[3].dateCol]),
+    };
+    toUpsert.push(bizData);
 
     // Check diff with VIN totals
     const vinTotal=vinByPO[poKey]||0;
@@ -998,13 +1029,12 @@ async function importBizContracts(rows,keys){
       diffWithVin.push({po:poKey,bizTotal:total,vinTotal,diff:r2(total-vinTotal)});
   }
 
-  // Upsert all (insert or update on conflict)
-  const allBiz=[...toInsert,...changedRows.map(c=>({...c.data}))];
-  for(let i=0;i<allBiz.length;i+=50){
-    const batch=allBiz.slice(i,i+50);
+  // Upsert all
+  let saved=0;
+  for(let i=0;i<toUpsert.length;i+=50){
+    const batch=toUpsert.slice(i,i+50);
     try{
-      const url=`${SU}/rest/v1/biz_contracts`;
-      const res=await fetch(url,{
+      const res=await fetch(`${SU}/rest/v1/biz_contracts`,{
         method:'POST',
         headers:{
           'Content-Type':'application/json',
@@ -1014,46 +1044,27 @@ async function importBizContracts(rows,keys){
         },
         body:JSON.stringify(batch)
       });
-      if(!res.ok)console.error('upsert err:',await res.text());
+      if(res.ok)saved+=batch.length;
+      else console.error('biz upsert err:',await res.text());
     }catch(e){console.error(e)}
-    showL(`导入中... ${Math.min(i+50,allBiz.length)}/${allBiz.length}`);
+    showL(`导入中... ${Math.min(i+50,toUpsert.length)}/${toUpsert.length}`);
   }
-  // Clear changedRows since we already upserted them
-  changedRows.length=0;
 
   const banner=document.getElementById('t3diffBanner');
-  let bannerHtml='';
-
-  if(changedRows.length){
-    bannerHtml+=`<div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:12px 14px;font-size:12px;color:#92400e;margin-bottom:8px">
-      <strong>⚠ ${changedRows.length}条合同金额有变化：</strong>
-      <div style="margin-top:5px;max-height:100px;overflow-y:auto;font-family:var(--mn)">
-        ${changedRows.slice(0,15).map(c=>`<div style="border-bottom:1px solid #fde68a;padding:2px 0">
-          ${c.po}：${c.oldTotal||'空'} → ${c.total}
-        </div>`).join('')}
-      </div>
-      <button class="btn sm" style="background:#f59e0b;color:#fff;margin-top:6px" id="applyBizDiffBtn">✓ 覆盖更新</button>
-    </div>`;
-  }
-
   if(diffWithVin.length){
-    bannerHtml+=`<div style="background:#fff0f0;border:1px solid #fca5a5;border-radius:8px;padding:12px 14px;font-size:12px;color:#991b1b">
+    banner.innerHTML=`<div style="background:#fff0f0;border:1px solid #fca5a5;border-radius:8px;padding:12px 14px;font-size:12px;color:#991b1b;margin-bottom:10px">
       <strong>🔍 ${diffWithVin.length}个PO的合同总额与发票明细合计不一致（需核实）：</strong>
       <div style="margin-top:5px;max-height:120px;overflow-y:auto;font-family:var(--mn)">
-        ${diffWithVin.slice(0,20).map(d=>`<div style="border-bottom:1px solid #fecaca;padding:2px 0">
+        ${diffWithVin.slice(0,20).map(d=>`<div style="border-bottom:1px solid #fecaca;padding:3px 0">
           <span style="font-weight:700">${d.po}</span>：
-          商务表=${fmt(d.bizTotal)}，发票明细合计=${fmt(d.vinTotal)}，
-          差额=<span style="font-weight:700;color:${d.diff>0?'var(--er)':'var(--ok)'}">${d.diff>0?'+':''}${fmt(d.diff)}</span>
+          商务表 ${fmt(d.bizTotal)} vs 明细合计 ${fmt(d.vinTotal)}
+          <span style="color:${d.diff>0?'var(--er)':'var(--ok)'}"> 差 ${d.diff>0?'+':''}${fmt(d.diff)}</span>
         </div>`).join('')}
       </div>
     </div>`;
-  }
+  }else{banner.innerHTML=''}
 
-  banner.innerHTML=bannerHtml;
-  if(changedRows.length&&document.getElementById('applyBizDiffBtn'))
-    document.getElementById('applyBizDiffBtn').onclick=()=>applyDiffs(changedRows,'biz_contracts','t3diffBanner');
-
-  toast(`商务表导入：${toInsert.length}条新增${changedRows.length?'，'+changedRows.length+'条有变化':''}${diffWithVin.length?'，'+diffWithVin.length+'个PO与明细不一致':''}`,'ok',5000);
+  toast(`商务表导入完成：${saved}条${diffWithVin.length?'，'+diffWithVin.length+'个PO金额与明细不一致':''}`,'ok',5000);
 }
 
 // ── T3 SEARCH ──
@@ -1120,30 +1131,39 @@ function renderT3(){
     const cDiff=(cTotal&&vinTot&&Math.abs(cTotal-vinTot)>0.01)?r2(cTotal-vinTot):null;
     const recons=[...d.reconNos];
 
-    // Paid slots: each unique recon_no = one payment batch
-    // Amount = sum of Balance AUD of all invoices in this PO with that recon_no
-    // Sort by payment_date so paid1 = earliest, paid2 = next, etc.
-    const reconGroups={};
-    d.invs.filter(inv=>inv.recon_no).forEach(inv=>{
-      const rn=inv.recon_no;
-      if(!reconGroups[rn])reconGroups[rn]={
-        recon_no:rn,
-        amount:0,
-        date:inv.payment_date||'',
-        method:inv.payment_method||''
-      };
-      reconGroups[rn].amount=r2(reconGroups[rn].amount+Number(inv.balance_aud));
-      // Use earliest non-empty date
-      if(inv.payment_date&&(!reconGroups[rn].date||inv.payment_date<reconGroups[rn].date))
-        reconGroups[rn].date=inv.payment_date;
-    });
-    // Sort by payment date (earliest first = paid1)
-    const paidSlots=Object.values(reconGroups).sort((a,b)=>{
-      if(!a.date&&!b.date)return 0;
-      if(!a.date)return 1;
-      if(!b.date)return -1;
-      return a.date<b.date?-1:a.date>b.date?1:0;
-    });
+    // Paid slots: prefer biz_contracts paid1-4 data (from uploaded商务表)
+    // Fall back to invoice recon_no grouping
+    const paidSlots=[];
+    if(bizContract&&(bizContract.paid1_amount||bizContract.paid2_amount||bizContract.paid3_amount||bizContract.paid4_amount)){
+      // Use biz_contracts paid data
+      for(let pi=1;pi<=4;pi++){
+        const amt=bizContract[`paid${pi}_amount`];
+        const dt=bizContract[`paid${pi}_date`];
+        if(amt){
+          // Find matching recon_no from invoices
+          const matchInv=d.invs.find(inv=>inv.payment_date&&inv.payment_date.startsWith&&dt&&inv.payment_date.startsWith(dt.substring(0,10)));
+          paidSlots.push({
+            amount:Number(amt),
+            date:dt||'',
+            recon_no:matchInv?matchInv.recon_no||'':''
+          });
+        }
+      }
+    }else{
+      // Fall back: group by recon_no from invoices
+      const reconGroups={};
+      d.invs.filter(inv=>inv.recon_no).forEach(inv=>{
+        const rn=inv.recon_no;
+        if(!reconGroups[rn])reconGroups[rn]={recon_no:rn,amount:0,date:inv.payment_date||''};
+        reconGroups[rn].amount=r2(reconGroups[rn].amount+Number(inv.balance_aud));
+        if(inv.payment_date&&(!reconGroups[rn].date||inv.payment_date<reconGroups[rn].date))
+          reconGroups[rn].date=inv.payment_date;
+      });
+      Object.values(reconGroups).sort((a,b)=>{
+        if(!a.date&&!b.date)return 0;if(!a.date)return 1;if(!b.date)return -1;
+        return a.date<b.date?-1:1;
+      }).forEach(g=>paidSlots.push(g));
+    }
 
     const paidTotal=paidSlots.reduce((s,p)=>s+p.amount,0);
     const remaining=r2(d.stmtBal-paidTotal);
