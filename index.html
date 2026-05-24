@@ -750,9 +750,17 @@ async function importPurchase(rows,keys){
   const modelCol=keys.find(k=>k.includes('适配机型')||k.includes('规格')||k.includes('型号'))||'';
   const subCol=keys.find(k=>k.includes('Subtotal')||k.includes('小计'))||priceCol;
 
+  // Debug: show detected columns
+  console.log('Excel列名:', keys);
+  console.log('识别到: VIN列=', vinCol, ' 价格列=', priceCol, ' 合同号=', cnCol, ' DJJ Code=', codeCol, ' 型号=', modelCol);
+  toast(`列名识别：VIN="${vinCol}" 价格="${priceCol||subCol}" 合同号="${cnCol}"`, 'ok', 6000);
+
   // Filter valid rows
   const validRows=rows.filter(r=>(r[vinCol]||'').toString().trim());
-  if(!validRows.length){toast('未找到车架号列数据','wn');return}
+  if(!validRows.length){
+    toast('❌ 未找到车架号列！Excel实际列名: '+keys.slice(0,8).join(', '),'er',8000);
+    return;
+  }
 
   // Get existing VINs
   const existing=await api('GET','vin_details',null,`?store=eq.${S.store}&select=id,vin,purchase_price_ex,invoice_no,purchase_po`)||[];
@@ -838,8 +846,15 @@ async function importSales(rows,keys){
   const priceCol=keys.find(k=>k.includes('不含税销售价')||k.includes('not including GST')||k.includes('不含税'))||'';
   const statusCol=keys.find(k=>k.includes('销售状态')||k.includes('出库状态')||k.includes('状态'))||'';
 
+  console.log('销售Excel列名:', keys);
+  console.log('识别到: VIN列=', vinCol, ' 销售单号=', invCol, ' 价格=', priceCol, ' 状态=', statusCol);
+  toast(`列名识别：VIN="${vinCol}" 销售单号="${invCol}" 价格="${priceCol}"`, 'ok', 6000);
+
   const validRows=rows.filter(r=>(r[vinCol]||'').toString().trim());
-  if(!validRows.length){toast('未找到车架号列','wn');return}
+  if(!validRows.length){
+    toast('❌ 未找到车架号列！Excel实际列名: '+keys.slice(0,8).join(', '),'er',8000);
+    return;
+  }
 
   // Map status values
   function mapStatus(s){
