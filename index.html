@@ -735,71 +735,49 @@ async function handleXlsUpload(input,type){
     const ab=await file.arrayBuffer();
     const wb=XLSX.read(ab,{type:'array'});
     const ws=wb.Sheets[wb.SheetNames[0]];
-    const rows=XLSX.utils.sheet_to_json(ws,{defval:''});
-    if(!rows.length){hideL();toast('Excel无数据','wn');return}
-    const keys=Object.keys(rows[0]);
-    showL(`处理${rows.length}行数据...`);
-    if(type==='purchase')await importPurchase(rows,keys);
-    else if(type==='sales')await importSales(rows,keys);
+    // Use array mode - row[i] = column i, no column name matching needed
+    const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+    if(rows.length<2){hideL();toast('Excel无数据','wn');return}
+    showL(`处理${rows.length-1}行数据...`);
+    if(type==='purchase')await importPurchase(rows);
+    else if(type==='sales')await importSales(rows);
     hideL();input.value='';
     await loadData();
   }catch(e){hideL();toast('读取失败: '+e.message,'er');console.error(e)}
 }
 
-async function importPurchase(rows,keys){
-  // Fixed column positions for Lark采购录入表:
-  // 0=合同号Contract Number, 3=DJJ Code, 17=适配机型/规格, 19=车架号, 24=价格Price, 25=小计Subtotal
-  const getP=(row,idx)=>(row[keys[idx]]||'').toString().trim();
-  const getN=(row,idx)=>parseFloat((row[keys[idx]]||'0').toString().replace(/[$,]/g,''))||0;
-  // Also try column name matching as fallback
-  const norm=k=>k.replace(/^[+=\s💰]+/,'').trim();
-  const vinCol=keys.find(k=>norm(k).includes('车架号'))||keys[19]||'';
-  const subCol=keys.find(k=>norm(k).includes('Subtotal')||norm(k).includes('小计'))||keys[25]||'';
-  const priceCol=subCol||keys.find(k=>norm(k).includes('价格 Price')||norm(k).includes('Price'))||keys[24]||'';
-  const cnCol=keys.find(k=>norm(k).includes('合同号')&&!norm(k).includes('已付'))||keys[0]||'';
-  const codeCol=keys.find(k=>norm(k).includes('DJJ Code'))||keys[3]||'';
-  const modelCol=keys.find(k=>norm(k).includes('适配机型')||norm(k).includes('规格'))||keys[17]||'';
-
-  // Debug: show detected columns
-  console.log('Excel列名:', keys);
-  toast(`列识别: VIN="${vinCol||'❌未找到'}" 价格="${priceCol||'❌未找到'}" 合同号="${cnCol||'空'}" DJJ="${codeCol||'空'}"`, 'ok', 6000);
-
-  // Filter valid rows
-  const validRows=rows.filter(r=>(r[vinCol]||'').toString().trim());
-  if(!validRows.length){
-    toast('❌ 未找到车架号列！Excel实际列名: '+keys.slice(0,8).join(', '),'er',8000);
-    return;
-  }
-
-  // Get existing VINs
-  const existing=await api('GET','vin_details',null,`?store=eq.${S.store}&select=id,vin,purchase_price_ex,invoice_no,purchase_po`)||[];
-  const exMap=Object.fromEntries(existing.map(e=>[e.vin,e]));
-
-  // Build all rows to upsert
-  const toUpsert=[], changedRows=[];
-  for(const row of validRows){
-    const vin=(row[vinCol]||'').toString().trim();
-    const price=parseFloat((row[priceCol]||'0').toString().replace(/[$,]/g,''))||0;
+async function importPurchase(rows){
+  // rows[0] = header, rows[1+] = data
+  // Col positions: 0=合同号, 3=DJJ Code, 17=适配机型/规格, 19=车架号, 25=小计Subtotal
+  const toUpsert=[];
+  let skipped=0;
+  for(let i=1;i<rows.length;i++){
+    const row=rows[i];
+    const vin=(row[19]||'').toString().trim();
+    if(!vin){skipped++;continue}
+    const priceStr=(row[25]||row[24]||'0').toString().replace(/,/g,'').trim();
+    const price=parseFloat(priceStr)||0;
     const gst=r2(price*0.1);
-    const invNo=(row[codeCol]||'').toString().trim();
-    const po=(row[cnCol]||'').toString().trim();
-    const model=(row[modelCol]||'').toString().trim()||null;
-    const vinData={store:S.store,vin,invoice_no:invNo||null,purchase_po:po||null,model,
-      purchase_price_ex:price||null,purchase_gst:price?gst:null,
-      purchase_total:price?r2(price+gst):null,gst_rate:10};
-    // Track changes for display only (but upsert all regardless)
-    if(exMap[vin]){
-      const ex=exMap[vin];
-      const priceChanged=Math.abs((Number(ex.purchase_price_ex)||0)-price)>0.01;
-      if(priceChanged)changedRows.push({vin,old:ex.purchase_price_ex,new:price});
-    }
-    toUpsert.push(vinData);
+    const po=(row[0]||'').toString().trim();
+    const djj=(row[3]||'').toString().trim();
+    const model=(row[17]||'').toString().trim();
+    toUpsert.push({
+      store:S.store,
+      vin,
+      purchase_po:po||null,
+      invoice_no:djj||null,
+      model:model||null,
+      purchase_price_ex:price||null,
+      purchase_gst:price?gst:null,
+      purchase_total:price?r2(price+gst):null,
+      gst_rate:10
+    });
   }
-
-  // Upsert ALL rows (insert new + update changed)
+  if(!toUpsert.length){toast('未找到有效VIN数据','er');return}
   let saved=0;
-  for(let i=0;i<toUpsert.length;i+=50){
-    const batch=toUpsert.slice(i,i+50);
+  for(let i=0;i<toUpsert.length;i+=100){
+    const batch=toUpsert.slice(i,i+100);
+    showL(`保存中 ${Math.min(i+100,toUpsert.length)}/${toUpsert.length}...`);
     try{
       const res=await fetch(`${SU}/rest/v1/vin_details`,{
         method:'POST',
@@ -808,116 +786,57 @@ async function importPurchase(rows,keys){
         body:JSON.stringify(batch)
       });
       if(res.ok)saved+=batch.length;
-      else{const err=await res.text();console.error('vin upsert err:',err);}
-    }catch(e){console.error('batch err',e)}
-    showL(`导入中... ${Math.min(i+50,toUpsert.length)}/${toUpsert.length}`);
+      else{const t=await res.text();console.error(t);toast('保存出错: '+t.substring(0,60),'er');}
+    }catch(e){console.error(e)}
   }
-
-  const banner=document.getElementById('t2diffBanner');
-  if(changedRows.length){
-    banner.innerHTML=`<div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:10px 14px;font-size:12px;color:#92400e">
-      ℹ️ ${changedRows.length}条价格已自动更新：
-      <span style="font-family:var(--mn)">${changedRows.slice(0,5).map(c=>c.vin+': '+c.old+'→'+c.new).join('，')}</span>
-      ${changedRows.length>5?'...':''}
-      <button onclick="this.parentElement.remove()" style="float:right;background:none;border:none;cursor:pointer;color:var(--t3)">✕</button>
-    </div>`;
-  }else{banner.innerHTML=''}
-
-  toast(`采购表导入完成：${saved}条（含${changedRows.length}条价格更新）`,'ok',4000);
+  document.getElementById('t2diffBanner').innerHTML='';
+  toast(`采购表导入完成：${saved}条VIN已保存`,'ok',4000);
 }
 
-async function applyDiffs(changedRows,table,bannerId){
-  showL('更新差异数据...');
-  for(let i=0;i<changedRows.length;i+=10){
-    const batch=changedRows.slice(i,i+10);
-    for(const c of batch){
-      try{await api('PATCH',table,c.data,`?id=eq.${c.id}`)}catch(e){console.error(e)}
-    }
-    showL(`更新中... ${Math.min(i+10,changedRows.length)}/${changedRows.length}`);
+async function importSales(rows){
+  // Col positions: 0=唯一销售单号, 22=车架号, 40=Total Amount(not including GST), 55=出库状态
+  const updates=[];
+  for(let i=1;i<rows.length;i++){
+    const row=rows[i];
+    const vin=(row[22]||'').toString().trim();
+    if(!vin)continue;
+    const inv=(row[0]||'').toString().trim();
+    const priceStr=(row[40]||'0').toString().replace(/[$,]/g,'').trim();
+    const price=parseFloat(priceStr)||0;
+    const statusRaw=(row[55]||'').toString().trim();
+    let status=null;
+    if(statusRaw.includes('已出库'))status='已全款';
+    else if(statusRaw.includes('未出库'))status='未售出';
+    else if(statusRaw)status=statusRaw;
+    updates.push({vin,sale_inv_no:inv||null,sale_price_ex:price||null,sale_status:status});
   }
-  hideL();toast('差异数据已更新','ok');
-  document.getElementById(bannerId).innerHTML='';
-  await loadData();
-}
-
-async function importSales(rows,keys){
-  const norm2=k=>k.replace(/^[+=\s💰]+/,'').trim();
-  const vinCol=keys.find(k=>norm2(k).includes('车架号'))||keys[22]||'';
-  const invCol=keys.find(k=>norm2(k).includes('唯一销售单号'))||keys[0]||'';
-  const priceCol=keys.find(k=>norm2(k).includes('not including GST')||norm2(k).includes('不含税销售价'))||keys[40]||'';
-  const statusCol=keys.find(k=>norm2(k).includes('出库状态')||norm2(k).includes('销售状态'))||keys[55]||'';
-
-  console.log('销售Excel列名:', keys);
-  toast(`销售列识别: VIN="${vinCol||'❌未找到'}" 销售单号="${invCol||'空'}" 价格="${priceCol||'空'}" 状态="${statusCol||'空'}"`, 'ok', 6000);
-
-  const validRows=rows.filter(r=>(r[vinCol]||'').toString().trim());
-  if(!validRows.length){
-    toast('❌ 未找到车架号列！Excel实际列名: '+keys.slice(0,8).join(', '),'er',8000);
-    return;
-  }
-
-  // Map status values
-  function mapStatus(s){
-    s=(s||'').toString().trim();
-    if(!s)return null;
-    if(s.includes('未售')||s.includes('未出库'))return'未售出';
-    if(s.includes('定金'))return'已收定金';
-    if(s.includes('全款')||s.includes('已出库'))return'已全款';
-    if(s.includes('特殊'))return'特殊';
-    return s;
-  }
-
-  // Get existing for diff check
-  const existing=await api('GET','vin_details',null,`?store=eq.${S.store}&select=id,vin,sale_inv_no,sale_price_ex,sale_status,purchase_price_ex`)||[];
-  const exMap=Object.fromEntries(existing.map(e=>[e.vin,e]));
-
-  const toUpdate=[],changedRows=[],notFound=[];
-  for(const row of validRows){
-    const vin=(row[vinCol]||'').toString().trim();
-    const saleEx=parseFloat((row[priceCol]||'0').toString().replace(/[$,]/g,''))||0;
-    const status=mapStatus(row[statusCol]);
-    const saleInv=(row[invCol]||'').toString().trim();
-    const updates={sale_inv_no:saleInv||null,sale_price_ex:saleEx||null,sale_status:status};
-    const ex=exMap[vin];
-    if(ex){
-      if(saleEx&&ex.purchase_price_ex){
-        updates.gross_profit=r2(saleEx-Number(ex.purchase_price_ex));
-        updates.gross_profit_rate=saleEx>0?Math.round(updates.gross_profit/saleEx*100):0;
+  if(!updates.length){toast('未找到有效销售数据','er');return}
+  // Match VINs and update
+  let count=0;
+  for(let i=0;i<updates.length;i+=20){
+    const batch=updates.slice(i,i+20);
+    showL(`更新销售数据 ${Math.min(i+20,updates.length)}/${updates.length}...`);
+    for(const u of batch){
+      const existing=S.vins.find(v=>v.vin===u.vin);
+      if(!existing)continue;
+      const upd={sale_inv_no:u.sale_inv_no,sale_price_ex:u.sale_price_ex,sale_status:u.sale_status};
+      if(u.sale_price_ex&&existing.purchase_price_ex){
+        upd.gross_profit=r2(u.sale_price_ex-Number(existing.purchase_price_ex));
+        upd.gross_profit_rate=u.sale_price_ex>0?Math.round(upd.gross_profit/u.sale_price_ex*100):0;
       }
-      const changed=(ex.sale_inv_no||'')!==saleInv||Math.abs((Number(ex.sale_price_ex)||0)-saleEx)>0.01||(ex.sale_status||'')!==(status||'');
-      if(changed)changedRows.push({data:updates,old:ex,id:ex.id,vin});
-      else toUpdate.push({data:updates,id:ex.id});
-    }else{notFound.push(vin)}
+      try{
+        await fetch(`${SU}/rest/v1/vin_details?id=eq.${existing.id}`,{
+          method:'PATCH',
+          headers:{'Content-Type':'application/json','apikey':SK,'Authorization':`Bearer ${SK}`},
+          body:JSON.stringify(upd)
+        });
+        count++;
+      }catch(e){console.error(e)}
+    }
   }
-
-  // Auto-update unchanged ones silently
-  for(let i=0;i<toUpdate.length;i+=10){
-    for(const u of toUpdate.slice(i,i+10))
-      try{await api('PATCH','vin_details',u.data,`?id=eq.${u.id}`)}catch(e){}
-  }
-
-  // Show diff for changed
-  const banner=document.getElementById('t2diffBanner');
-  if(changedRows.length){
-    banner.innerHTML=`<div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:12px 14px;font-size:12px;color:#92400e">
-      <strong>⚠ ${changedRows.length}条销售数据有变化：</strong>
-      <div style="margin-top:6px;max-height:140px;overflow-y:auto;font-family:var(--mn)">
-        ${changedRows.slice(0,20).map(c=>`<div style="margin-bottom:2px;border-bottom:1px solid #fde68a;padding:2px 0">
-          <span style="font-weight:700">${c.vin}</span>：
-          销售价 ${c.old.sale_price_ex||'空'}→${c.data.sale_price_ex}，
-          状态 ${c.old.sale_status||'空'}→${c.data.sale_status}
-        </div>`).join('')}
-      </div>
-      <div style="margin-top:8px;display:flex;gap:8px">
-        <button class="btn sm" style="background:#f59e0b;color:#fff" id="applySalesDiffBtn">✓ 全部覆盖更新</button>
-        <button class="btn bs sm" onclick="document.getElementById('t2diffBanner').innerHTML=''">✕ 忽略</button>
-      </div>
-    </div>`;
-    document.getElementById('applySalesDiffBtn').onclick=()=>applyDiffs(changedRows,'vin_details','t2diffBanner');
-  }else{banner.innerHTML=''}
-
-  toast(`销售表导入：${toUpdate.length}条更新，${changedRows.length}条有变化需确认${notFound.length?'，'+notFound.length+'条VIN未找到':''}`,'ok',5000);
+  toast(`销售表导入完成：${count}条已更新`,'ok',4000);
 }
+
 
 // ── BIZ CONTRACT UPLOAD ──
 async function handleBizUpload(input){
