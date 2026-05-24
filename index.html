@@ -747,15 +747,18 @@ async function handleXlsUpload(input,type){
 }
 
 async function importPurchase(rows,keys){
-  // Column names may have prefix "+ " or "= "
-  const norm=k=>k.replace(/^[+=\s]+/,'').trim();
-  const vinCol=keys.find(k=>norm(k).includes('车架号')||norm(k).toLowerCase()==='vin')||'';
-  // Prefer Subtotal over Price (Subtotal = actual purchase amount)
-  const subCol=keys.find(k=>norm(k).includes('Subtotal')||norm(k).includes('小计'))||'';
-  const priceCol=subCol||keys.find(k=>norm(k).includes('价格 Price')||norm(k).includes('Price')||norm(k).includes('价格'))||'';
-  const cnCol=keys.find(k=>norm(k).includes('合同号')&&!norm(k).includes('已付'))||'';
-  const codeCol=keys.find(k=>norm(k).includes('DJJ Code')||norm(k).includes('DJJ唯一代码'))||'';
-  const modelCol=keys.find(k=>norm(k).includes('适配机型')||norm(k).includes('规格'))||'';
+  // Fixed column positions for Lark采购录入表:
+  // 0=合同号Contract Number, 3=DJJ Code, 17=适配机型/规格, 19=车架号, 24=价格Price, 25=小计Subtotal
+  const getP=(row,idx)=>(row[keys[idx]]||'').toString().trim();
+  const getN=(row,idx)=>parseFloat((row[keys[idx]]||'0').toString().replace(/[$,]/g,''))||0;
+  // Also try column name matching as fallback
+  const norm=k=>k.replace(/^[+=\s💰]+/,'').trim();
+  const vinCol=keys.find(k=>norm(k).includes('车架号'))||keys[19]||'';
+  const subCol=keys.find(k=>norm(k).includes('Subtotal')||norm(k).includes('小计'))||keys[25]||'';
+  const priceCol=subCol||keys.find(k=>norm(k).includes('价格 Price')||norm(k).includes('Price'))||keys[24]||'';
+  const cnCol=keys.find(k=>norm(k).includes('合同号')&&!norm(k).includes('已付'))||keys[0]||'';
+  const codeCol=keys.find(k=>norm(k).includes('DJJ Code'))||keys[3]||'';
+  const modelCol=keys.find(k=>norm(k).includes('适配机型')||norm(k).includes('规格'))||keys[17]||'';
 
   // Debug: show detected columns
   console.log('Excel列名:', keys);
@@ -860,11 +863,10 @@ async function applyDiffs(changedRows,table,bannerId){
 
 async function importSales(rows,keys){
   const norm2=k=>k.replace(/^[+=\s💰]+/,'').trim();
-  const vinCol=keys.find(k=>norm2(k).includes('车架号'))||'';
-  const invCol=keys.find(k=>norm2(k).includes('唯一销售单号'))||'';
-  // Total Amount(not including GST) is the key column
-  const priceCol=keys.find(k=>norm2(k).includes('not including GST')||norm2(k).includes('不含税销售价'))||'';
-  const statusCol=keys.find(k=>norm2(k).includes('出库状态')||norm2(k).includes('销售状态'))||'';
+  const vinCol=keys.find(k=>norm2(k).includes('车架号'))||keys[22]||'';
+  const invCol=keys.find(k=>norm2(k).includes('唯一销售单号'))||keys[0]||'';
+  const priceCol=keys.find(k=>norm2(k).includes('not including GST')||norm2(k).includes('不含税销售价'))||keys[40]||'';
+  const statusCol=keys.find(k=>norm2(k).includes('出库状态')||norm2(k).includes('销售状态'))||keys[55]||'';
 
   console.log('销售Excel列名:', keys);
   toast(`销售列识别: VIN="${vinCol||'❌未找到'}" 销售单号="${invCol||'空'}" 价格="${priceCol||'空'}" 状态="${statusCol||'空'}"`, 'ok', 6000);
@@ -958,114 +960,91 @@ async function handleBizUpload(input){
 }
 
 async function importBizContracts(rows,keys){
-  // Column mapping for actual Lark export format:
-  // 合同号(col0), 总金额(col8), 已付金额1(col9), 支付时间1(col10),
-  // 已付金额2(col11), 支付时间2(col12), 已付金额3(col13), 支付时间3(col14),
-  // 已付金额4(col15), 支付时间4(col16)
-  const poCol=keys.find(k=>k==='合同号')||keys[0];
-  const totCol=keys.find(k=>k==='总金额')||'';
-  const p=n=>{
-    if(n==null||n==='')return 0;
-    return parseFloat(n.toString().replace(/[$,]/g,'').trim())||0;
+  // Fixed column positions (0-based):
+  // 0=合同号, 8=总金额, 9=已付金额1, 10=支付时间1, 11=已付金额2, 12=支付时间2
+  // 13=已付金额3, 14=支付时间3, 15=已付金额4, 16=支付时间4
+  const pNum=v=>{
+    if(v==null||v==='')return null;
+    const n=parseFloat(v.toString().replace(/[$,]/g,'').trim());
+    return isNaN(n)?null:n;
   };
-  const fmtDate=d=>{
-    if(!d)return null;
-    // Handle datetime objects from Excel
-    if(d instanceof Date)return d.toISOString().split('T')[0];
-    const s=d.toString().trim();
-    if(!s)return null;
+  const pDate=v=>{
+    if(!v)return null;
+    const s=v.toString().trim();
+    if(!s||s==='null')return null;
     // "2026-02-05 00:00:00" → "2026-02-05"
-    return s.split(' ')[0]||s;
+    return s.includes('T')?s.split('T')[0]:s.split(' ')[0];
   };
 
-  // Find paid amount/date columns (up to 4)
-  const paidCols=[];
-  for(let i=1;i<=4;i++){
-    const amtCol=keys.find(k=>k===`已付金额${i}`||k===`已支付金额${i}`)||'';
-    const dateCol=keys.find(k=>k===`支付时间${i}`)||'';
-    paidCols.push({amtCol,dateCol});
-  }
+  // Get row values as array (XLSX sheet_to_json with header:1 gives arrays)
+  // But we're using defval:'' mode which gives objects, so re-read as array
+  // Actually rows here are objects keyed by header name
+  // Use positional access via keys array
+  const getCol=(row,idx)=>row[keys[idx]];
 
-  // Get existing for diff check
-  let existing=[];
-  try{existing=await api('GET','biz_contracts',null,`?store=eq.${S.store}&select=id,po_no,contract_total`)||[]}catch(e){}
-  const exMap=Object.fromEntries(existing.map(e=>[e.po_no,e]));
-
-  // VIN totals by PO for comparison
+  let saved=0,skipped=0;
+  const toUpsert=[];
   const vinByPO={};
   S.vins.forEach(v=>{
     if(!v.purchase_po)return;
     const po=xPO(v.purchase_po);
     vinByPO[po]=(vinByPO[po]||0)+Number(v.purchase_total||0);
   });
-
-  const toUpsert=[],diffWithVin=[];
-  let skipped=0;
+  const diffWithVin=[];
 
   for(const row of rows){
-    const po=(row[poCol]||'').toString().trim();
+    const po=(getCol(row,0)||'').toString().trim();
     if(!po)continue;
     const poKey=xPO(po);
-    const total=p(row[totCol]);
+    const total=pNum(getCol(row,8));
+    const p1=pNum(getCol(row,9)),d1=pDate(getCol(row,10));
+    const p2=pNum(getCol(row,11)),d2=pDate(getCol(row,12));
+    const p3=pNum(getCol(row,13)),d3=pDate(getCol(row,14));
+    const p4=pNum(getCol(row,15)),d4=pDate(getCol(row,16));
 
-    const bizData={
-      store:S.store,
-      po_no:poKey,
-      contract_total:total||null,
-      paid1_amount:p(row[paidCols[0].amtCol])||null,
-      paid1_date:fmtDate(row[paidCols[0].dateCol]),
-      paid2_amount:p(row[paidCols[1].amtCol])||null,
-      paid2_date:fmtDate(row[paidCols[1].dateCol]),
-      paid3_amount:p(row[paidCols[2].amtCol])||null,
-      paid3_date:fmtDate(row[paidCols[2].dateCol]),
-      paid4_amount:p(row[paidCols[3].amtCol])||null,
-      paid4_date:fmtDate(row[paidCols[3].dateCol]),
-    };
-    toUpsert.push(bizData);
+    toUpsert.push({
+      store:S.store, po_no:poKey,
+      contract_total:total,
+      paid1_amount:p1, paid1_date:d1,
+      paid2_amount:p2, paid2_date:d2,
+      paid3_amount:p3, paid3_date:d3,
+      paid4_amount:p4, paid4_date:d4,
+    });
 
-    // Check diff with VIN totals
-    const vinTotal=vinByPO[poKey]||0;
-    if(total&&vinTotal&&Math.abs(total-vinTotal)>0.01)
-      diffWithVin.push({po:poKey,bizTotal:total,vinTotal,diff:r2(total-vinTotal)});
+    const vinTot=vinByPO[poKey]||0;
+    if(total&&vinTot&&Math.abs(total-vinTot)>0.01)
+      diffWithVin.push({po:poKey,bizTotal:total,vinTot,diff:r2(total-vinTot)});
   }
 
-  // Upsert all
-  let saved=0;
   for(let i=0;i<toUpsert.length;i+=50){
     const batch=toUpsert.slice(i,i+50);
+    showL(`导入商务表 ${Math.min(i+50,toUpsert.length)}/${toUpsert.length}...`);
     try{
       const res=await fetch(`${SU}/rest/v1/biz_contracts`,{
         method:'POST',
-        headers:{
-          'Content-Type':'application/json',
-          'apikey':SK,
-          'Authorization':`Bearer ${SK}`,
-          'Prefer':'resolution=merge-duplicates,return=minimal'
-        },
+        headers:{'Content-Type':'application/json','apikey':SK,'Authorization':`Bearer ${SK}`,'Prefer':'resolution=merge-duplicates,return=minimal'},
         body:JSON.stringify(batch)
       });
       if(res.ok)saved+=batch.length;
-      else console.error('biz upsert err:',await res.text());
+      else{const err=await res.text();console.error('biz err:',err);toast('导入错误: '+err.substring(0,80),'er');}
     }catch(e){console.error(e)}
-    showL(`导入中... ${Math.min(i+50,toUpsert.length)}/${toUpsert.length}`);
   }
 
   const banner=document.getElementById('t3diffBanner');
   if(diffWithVin.length){
     banner.innerHTML=`<div style="background:#fff0f0;border:1px solid #fca5a5;border-radius:8px;padding:12px 14px;font-size:12px;color:#991b1b;margin-bottom:10px">
-      <strong>🔍 ${diffWithVin.length}个PO的合同总额与发票明细合计不一致（需核实）：</strong>
-      <div style="margin-top:5px;max-height:120px;overflow-y:auto;font-family:var(--mn)">
-        ${diffWithVin.slice(0,20).map(d=>`<div style="border-bottom:1px solid #fecaca;padding:3px 0">
-          <span style="font-weight:700">${d.po}</span>：
-          商务表 ${fmt(d.bizTotal)} vs 明细合计 ${fmt(d.vinTotal)}
-          <span style="color:${d.diff>0?'var(--er)':'var(--ok)'}"> 差 ${d.diff>0?'+':''}${fmt(d.diff)}</span>
+      <strong>🔍 ${diffWithVin.length}个PO合同总额与发票明细合计不一致：</strong>
+      <div style="margin-top:5px;max-height:100px;overflow-y:auto;font-family:var(--mn)">
+        ${diffWithVin.slice(0,20).map(d=>`<div style="border-bottom:1px solid #fecaca;padding:2px 0">
+          <b>${d.po}</b>: 商务表=${fmt(d.bizTotal)} 明细=${fmt(d.vinTot)}
+          <span style="color:${d.diff>0?'var(--er)':'var(--ok)'}"> 差${d.diff>0?'+':''}${fmt(d.diff)}</span>
         </div>`).join('')}
       </div>
     </div>`;
   }else{banner.innerHTML=''}
-
-  toast(`商务表导入完成：${saved}条${diffWithVin.length?'，'+diffWithVin.length+'个PO金额与明细不一致':''}`,'ok',5000);
+  toast(`商务表导入：${saved}条${diffWithVin.length?'，'+diffWithVin.length+'个PO金额不一致':''}`,'ok',5000);
 }
+
 
 // ── T3 SEARCH ──
 let t3q='';
