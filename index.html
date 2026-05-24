@@ -775,7 +775,8 @@ async function importPurchase(rows,keys){
   const existing=await api('GET','vin_details',null,`?store=eq.${S.store}&select=id,vin,purchase_price_ex,invoice_no,purchase_po`)||[];
   const exMap=Object.fromEntries(existing.map(e=>[e.vin,e]));
 
-  const toInsert=[],changedRows=[];
+  // Build all rows to upsert
+  const toUpsert=[], changedRows=[];
   for(const row of validRows){
     const vin=(row[vinCol]||'').toString().trim();
     const price=parseFloat((row[priceCol]||'0').toString().replace(/[$,]/g,''))||0;
@@ -786,65 +787,43 @@ async function importPurchase(rows,keys){
     const vinData={store:S.store,vin,invoice_no:invNo||null,purchase_po:po||null,model,
       purchase_price_ex:price||null,purchase_gst:price?gst:null,
       purchase_total:price?r2(price+gst):null,gst_rate:10};
+    // Track changes for display only (but upsert all regardless)
     if(exMap[vin]){
       const ex=exMap[vin];
       const priceChanged=Math.abs((Number(ex.purchase_price_ex)||0)-price)>0.01;
-      const invChanged=(ex.invoice_no||'')!==invNo;
-      const poChanged=(ex.purchase_po||'')!==po;
-      if(priceChanged||invChanged||poChanged)
-        changedRows.push({data:vinData,old:ex,id:ex.id,priceChanged,invChanged,poChanged});
-    }else{
-      toInsert.push(vinData);
+      if(priceChanged)changedRows.push({vin,old:ex.purchase_price_ex,new:price});
     }
+    toUpsert.push(vinData);
   }
 
-  // Batch upsert new rows (50 per batch) - use upsert to avoid duplicate VIN errors
+  // Upsert ALL rows (insert new + update changed)
   let saved=0;
-  for(let i=0;i<toInsert.length;i+=50){
-    const batch=toInsert.slice(i,i+50);
+  for(let i=0;i<toUpsert.length;i+=50){
+    const batch=toUpsert.slice(i,i+50);
     try{
       const res=await fetch(`${SU}/rest/v1/vin_details`,{
         method:'POST',
-        headers:{
-          'Content-Type':'application/json',
-          'apikey':SK,
-          'Authorization':`Bearer ${SK}`,
-          'Prefer':'resolution=merge-duplicates,return=minimal'
-        },
+        headers:{'Content-Type':'application/json','apikey':SK,'Authorization':`Bearer ${SK}`,
+          'Prefer':'resolution=merge-duplicates,return=minimal'},
         body:JSON.stringify(batch)
       });
       if(res.ok)saved+=batch.length;
-      else console.error('vin upsert err:',await res.text());
-    }catch(e){console.error('batch insert err',e)}
-    showL(`导入中... ${Math.min(i+50,toInsert.length)}/${toInsert.length}`);
+      else{const err=await res.text();console.error('vin upsert err:',err);}
+    }catch(e){console.error('batch err',e)}
+    showL(`导入中... ${Math.min(i+50,toUpsert.length)}/${toUpsert.length}`);
   }
 
-  // Show diff banner for changed rows
   const banner=document.getElementById('t2diffBanner');
   if(changedRows.length){
-    const diffRows=changedRows.slice(0,20);
-    banner.innerHTML=`<div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:12px 14px;font-size:12px;color:#92400e">
-      <strong>⚠ 发现${changedRows.length}条数据有变化（仅显示前20条）：</strong>
-      <div style="margin-top:6px;max-height:140px;overflow-y:auto;font-family:var(--mn)">
-        ${diffRows.map(c=>{
-          const diffs=[];
-          if(c.priceChanged)diffs.push(`价格 ${c.old.purchase_price_ex||'空'} → ${c.data.purchase_price_ex}`);
-          if(c.invChanged)diffs.push(`发票号 ${c.old.invoice_no||'空'} → ${c.data.invoice_no}`);
-          if(c.poChanged)diffs.push(`PO ${c.old.purchase_po||'空'} → ${c.data.purchase_po}`);
-          return`<div style="margin-bottom:3px;padding:3px 0;border-bottom:1px solid #fde68a">
-            <span style="font-weight:700">${c.old.vin}</span>：${diffs.join('；')}
-          </div>`;
-        }).join('')}
-      </div>
-      <div style="margin-top:8px;display:flex;gap:8px">
-        <button class="btn sm" style="background:#f59e0b;color:#fff" id="applyDiffBtn">✓ 全部覆盖更新</button>
-        <button class="btn bs sm" onclick="document.getElementById('t2diffBanner').innerHTML=''">✕ 忽略差异</button>
-      </div>
+    banner.innerHTML=`<div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:10px 14px;font-size:12px;color:#92400e">
+      ℹ️ ${changedRows.length}条价格已自动更新：
+      <span style="font-family:var(--mn)">${changedRows.slice(0,5).map(c=>c.vin+': '+c.old+'→'+c.new).join('，')}</span>
+      ${changedRows.length>5?'...':''}
+      <button onclick="this.parentElement.remove()" style="float:right;background:none;border:none;cursor:pointer;color:var(--t3)">✕</button>
     </div>`;
-    document.getElementById('applyDiffBtn').onclick=()=>applyDiffs(changedRows,'vin_details','t2diffBanner');
   }else{banner.innerHTML=''}
 
-  toast(`采购表导入：${saved}条新增${changedRows.length?'，'+changedRows.length+'条有变化需确认':''}，无变化${validRows.length-toInsert.length-changedRows.length}条`,'ok',5000);
+  toast(`采购表导入完成：${saved}条（含${changedRows.length}条价格更新）`,'ok',4000);
 }
 
 async function applyDiffs(changedRows,table,bannerId){
