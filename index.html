@@ -200,9 +200,11 @@ tr.ign{opacity:.4;text-decoration:line-through}
 <div class="pnl" id="t2">
   <div class="sh">
     <div><div class="st">发票明细</div><div class="ss2">VIN级别 · 采购价 vs 销售价 · 毛利</div></div>
-    <div style="display:flex;gap:7px">
-      <button class="btn bs sm" onclick="document.getElementById('xlsF').click()">↑ 上传采购/销售Excel</button>
-      <input type="file" id="xlsF" accept=".xlsx,.xls" style="display:none" onchange="handleXlsUpload(this)">
+    <div style="display:flex;gap:7px;flex-wrap:wrap">
+      <button class="btn bs sm" onclick="document.getElementById('xlsPurchF').click()">↑ 上传合同类采购表</button>
+      <input type="file" id="xlsPurchF" accept=".xlsx,.xls" style="display:none" onchange="handleXlsUpload(this,'purchase')">
+      <button class="btn bs sm" onclick="document.getElementById('xlsSalesF').click()">↑ 上传销售明细表</button>
+      <input type="file" id="xlsSalesF" accept=".xlsx,.xls" style="display:none" onchange="handleXlsUpload(this,'sales')">
       <button class="btn bs sm" onclick="expT2()">↓ 导出</button>
     </div>
   </div>
@@ -210,8 +212,10 @@ tr.ign{opacity:.4;text-decoration:line-through}
     <input class="srch" placeholder="搜索VIN/发票号/销售单号..." oninput="ft2q(this.value)">
     <select class="fsl" onchange="ft2st(this.value)">
       <option value="">全部销售状态</option>
-      <option value="全款">全款</option><option value="欠款">欠款</option>
-      <option value="未售">未售</option><option value="租赁">租赁</option>
+      <option value="未售出">未售出</option>
+      <option value="已收定金">已收定金</option>
+      <option value="已全款">已全款</option>
+      <option value="特殊">特殊</option>
     </select>
     <select class="fsl" onchange="ft2pr(this.value)">
       <option value="">毛利率 全部</option>
@@ -241,8 +245,13 @@ tr.ign{opacity:.4;text-decoration:line-through}
 <div class="pnl" id="t3">
   <div class="sh">
     <div><div class="st">商务汇总</div><div class="ss2">PO合同级别 · 自动汇总采购额 · 付款记录</div></div>
-    <button class="btn bp sm" onclick="showAddRecon()">+ 新增对账号</button>
+    <div style="display:flex;gap:7px;align-items:center">
+      <input class="srch" placeholder="搜索PO号/对账号..." oninput="ft3q(this.value)" style="width:180px">
+      <button class="btn bs sm" onclick="document.getElementById('xlsBizF').click()">↑ 上传合同商务表</button>
+      <input type="file" id="xlsBizF" accept=".xlsx,.xls" style="display:none" onchange="handleBizUpload(this)">
+    </div>
   </div>
+  <div id="t3diffBanner" style="margin-bottom:10px"></div>
   <div id="t3rc" style="margin-bottom:18px"></div>
   <div style="font-family:var(--hd);font-size:15px;font-weight:700;margin-bottom:10px">PO合同汇总</div>
   <div class="tw">
@@ -348,7 +357,7 @@ async function api(method,table,body,params=''){
   return t?JSON.parse(t):null;
 }
 
-const S={store:'悉尼',month:'',invoices:[],vins:[],recons:[],pdf:null,sort:{col:'invoice_date',dir:1},f1:{q:'',st:'',pay:''},f2:{q:'',st:'',pr:''}};
+const S={store:'悉尼',month:'',invoices:[],vins:[],recons:[],biz:[],pdf:null,sort:{col:'invoice_date',dir:1},f1:{q:'',st:'',pay:''},f2:{q:'',st:'',pr:''}};
 const fmt=n=>n==null?'—':Number(n).toLocaleString('en-AU',{minimumFractionDigits:2,maximumFractionDigits:2});
 const r2=n=>Math.round(n*100)/100;
 const today=()=>new Date().toISOString().split('T')[0];
@@ -495,6 +504,7 @@ async function loadData(){
     S.invoices=await api('GET','invoices',null,`?store=eq.${S.store}&order=invoice_date.desc,invoice_no.asc`)||[];
     S.vins=await api('GET','vin_details',null,`?store=eq.${S.store}&order=invoice_no.asc,vin.asc`)||[];
     S.recons=await api('GET','recon_payments',null,`?store=eq.${S.store}&order=payment_date.desc`)||[];
+    try{S.biz=await api('GET','biz_contracts',null,`?store=eq.${S.store}`)||[]}catch(e){S.biz=[]}
     const months=[...new Set(S.invoices.map(r=>r.statement_month))].sort().reverse();
     if(!S.month&&months.length)S.month=months[0];
     renderMC(months);updStats();renderT1();hideL();
@@ -691,7 +701,7 @@ function renderT2(){
     if(pr==='neg')return rt<0;if(pr==='lt10')return rt>=0&&rt<10;
     if(pr==='lt20')return rt>=0&&rt<20;if(pr==='gt20')return rt>=20;return true;
   })}
-  const ssBadge={全款:'<span class="bd b-ok">全款</span>',欠款:'<span class="bd b-wn">欠款</span>',未售:'<span class="bd b-mu">未售</span>',租赁:'<span class="bd b-ac">租赁</span>'};
+  const ssBadge={'未售出':'<span class="bd b-mu">未售出</span>','已收定金':'<span class="bd b-wn">已收定金</span>','已全款':'<span class="bd b-ok">已全款</span>','特殊':'<span class="bd b-pu">特殊</span>','全款':'<span class="bd b-ok">全款</span>','未售':'<span class="bd b-mu">未售</span>'};
   document.getElementById('t2b').innerHTML=rows.length?rows.map(r=>`<tr>
     <td class="mono ec" style="font-size:11px;color:var(--ac);cursor:pointer" onclick="ecText('${r.id}','invoice_no',this,'vin_details')">${r.invoice_no||'<span style="color:var(--t3)">—</span>'}</td>
     <td class="mono ec" style="font-size:11px;cursor:pointer" onclick="ecText('${r.id}','purchase_po',this,'vin_details')">${r.purchase_po||'<span style="color:var(--t3)">—</span>'}</td>
@@ -705,7 +715,7 @@ function renderT2(){
     <td class="num ec" style="cursor:pointer" onclick="ecText('${r.id}','sale_price_ex',this,'vin_details')">${fmt(r.sale_price_ex)}</td>
     <td class="num" style="color:${r.gross_profit>0?'var(--ok)':r.gross_profit<0?'var(--er)':'var(--t3)'};font-weight:600">${r.gross_profit!=null?fmt(r.gross_profit):'—'}</td>
     <td class="num" style="color:${r.gross_profit_rate>20?'var(--ok)':r.gross_profit_rate>0?'var(--wn)':'var(--er)'}">${r.gross_profit_rate!=null?r.gross_profit_rate+'%':'—'}</td>
-    <td class="ec" style="cursor:pointer" onclick="ecSel('${r.id}','sale_status',this,'vin_details',['全款','欠款','未售','租赁'])">${ssBadge[r.sale_status]||'<span style="color:var(--t3);font-size:12px">点击设置</span>'}</td>
+    <td class="ec" style="cursor:pointer" onclick="ecSel('${r.id}','sale_status',this,'vin_details',['未售出','已收定金','已全款','特殊'])">${ssBadge[r.sale_status]||'<span style="color:var(--t3);font-size:12px">点击设置</span>'}</td>
     <td class="mono ec" style="border-left:2px solid var(--b1);font-size:12px;color:var(--wn);cursor:pointer" onclick="ecText('${r.id}','recon_no',this,'vin_details')">${r.recon_no||'<span style="color:var(--t3)">—</span>'}</td>
     <td class="ec" style="cursor:pointer" onclick="ecSel('${r.id}','contract_type',this,'vin_details',['确认合同','自有'])">${r.contract_type?`<span class="bd b-mu">${r.contract_type}</span>`:'<span style="color:var(--t3);font-size:12px">点击设置</span>'}</td>
     <td class="ec" style="cursor:pointer" onclick="ecSel('${r.id}','payment_method',this,'vin_details',['直接支付','贷款'])">${r.payment_method?`<span class="bd ${r.payment_method==='直接支付'?'b-ok':'b-ac'}">${r.payment_method}</span>`:'<span style="color:var(--t3);font-size:12px">点击设置</span>'}</td>
@@ -713,7 +723,7 @@ function renderT2(){
 }
 
 // ── EXCEL UPLOAD ──
-async function handleXlsUpload(input){
+async function handleXlsUpload(input,type){
   const file=input.files[0];
   if(!file)return;
   showL('读取Excel...');
@@ -724,110 +734,284 @@ async function handleXlsUpload(input){
     const rows=XLSX.utils.sheet_to_json(ws,{defval:''});
     if(!rows.length){hideL();toast('Excel无数据','wn');return}
     const keys=Object.keys(rows[0]);
-    // Detect type by columns
-    const isPurchase=keys.some(k=>k.includes('车架号'))||keys.some(k=>k.includes('VIN')||k==='vin');
-    const isSales=keys.some(k=>k.includes('唯一销售单号')||k.includes('销售单号'));
     showL(`处理${rows.length}行数据...`);
-    if(isPurchase&&!isSales)await importPurchase(rows,keys);
-    else if(isSales)await importSales(rows,keys);
-    else{hideL();toast('未能识别Excel类型，请确认列名包含"车架号"或"唯一销售单号"','er');return}
+    if(type==='purchase')await importPurchase(rows,keys);
+    else if(type==='sales')await importSales(rows,keys);
     hideL();input.value='';
     await loadData();
   }catch(e){hideL();toast('读取失败: '+e.message,'er');console.error(e)}
 }
 
 async function importPurchase(rows,keys){
-  const vinCol=keys.find(k=>k.includes('车架号')||k==='vin')||'';
+  const vinCol=keys.find(k=>k.includes('车架号')||k.toLowerCase()==='vin')||'';
   const priceCol=keys.find(k=>k==='Price'||k==='价格'||k.toLowerCase()==='price')||'';
   const cnCol=keys.find(k=>k.includes('合同号')&&!k.includes('已付'))||'';
   const codeCol=keys.find(k=>k.includes('DJJ')||k.includes('Code')||k.includes('发票号'))||'';
   const modelCol=keys.find(k=>k.includes('适配机型')||k.includes('规格')||k.includes('型号'))||'';
   const subCol=keys.find(k=>k.includes('Subtotal')||k.includes('小计'))||priceCol;
 
-  // Get existing VINs to detect diffs
+  // Filter valid rows
+  const validRows=rows.filter(r=>(r[vinCol]||'').toString().trim());
+  if(!validRows.length){toast('未找到车架号列数据','wn');return}
+
+  // Get existing VINs
   const existing=await api('GET','vin_details',null,`?store=eq.${S.store}&select=id,vin,purchase_price_ex,invoice_no,purchase_po`)||[];
   const exMap=Object.fromEntries(existing.map(e=>[e.vin,e]));
 
-  const newRows=[],changedRows=[],existingRows=[];
-  for(const row of rows){
+  const toInsert=[],changedRows=[];
+  for(const row of validRows){
     const vin=(row[vinCol]||'').toString().trim();
-    if(!vin)continue;
     const price=parseFloat((row[subCol]||row[priceCol]||'0').toString().replace(/[$,]/g,''))||0;
     const gst=r2(price*0.1);
     const invNo=(row[codeCol]||'').toString().trim();
     const po=(row[cnCol]||'').toString().trim();
     const model=(row[modelCol]||'').toString().trim()||null;
     const vinData={store:S.store,vin,invoice_no:invNo||null,purchase_po:po||null,model,
-      purchase_price_ex:price||null,purchase_gst:price?gst:null,purchase_total:price?r2(price+gst):null,gst_rate:10};
+      purchase_price_ex:price||null,purchase_gst:price?gst:null,
+      purchase_total:price?r2(price+gst):null,gst_rate:10};
     if(exMap[vin]){
       const ex=exMap[vin];
-      const changed=Math.abs((Number(ex.purchase_price_ex)||0)-price)>0.01||(ex.invoice_no||'')!==invNo||(ex.purchase_po||'')!==po;
-      if(changed)changedRows.push({data:vinData,old:ex,id:ex.id});
-      else existingRows.push(vin);
+      const priceChanged=Math.abs((Number(ex.purchase_price_ex)||0)-price)>0.01;
+      const invChanged=(ex.invoice_no||'')!==invNo;
+      const poChanged=(ex.purchase_po||'')!==po;
+      if(priceChanged||invChanged||poChanged)
+        changedRows.push({data:vinData,old:ex,id:ex.id,priceChanged,invChanged,poChanged});
     }else{
-      newRows.push(vinData);
+      toInsert.push(vinData);
     }
   }
 
-  // Show diff banner
+  // Batch insert new rows (50 per batch)
+  let saved=0;
+  for(let i=0;i<toInsert.length;i+=50){
+    const batch=toInsert.slice(i,i+50);
+    try{await api('POST','vin_details',batch);saved+=batch.length}
+    catch(e){console.error('batch insert err',e)}
+    showL(`导入中... ${Math.min(i+50,toInsert.length)}/${toInsert.length}`);
+  }
+
+  // Show diff banner for changed rows
   const banner=document.getElementById('t2diffBanner');
   if(changedRows.length){
+    const diffRows=changedRows.slice(0,20);
     banner.innerHTML=`<div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:12px 14px;font-size:12px;color:#92400e">
-      <strong>⚠ 发现${changedRows.length}条数据有变化：</strong>
-      <div style="margin-top:6px;max-height:120px;overflow-y:auto">
-        ${changedRows.map(c=>`<div style="font-family:var(--mn);margin-bottom:2px">VIN ${c.old.vin}：采购价 ${c.old.purchase_price_ex||'空'} → ${c.data.purchase_price_ex}</div>`).join('')}
+      <strong>⚠ 发现${changedRows.length}条数据有变化（仅显示前20条）：</strong>
+      <div style="margin-top:6px;max-height:140px;overflow-y:auto;font-family:var(--mn)">
+        ${diffRows.map(c=>{
+          const diffs=[];
+          if(c.priceChanged)diffs.push(`价格 ${c.old.purchase_price_ex||'空'} → ${c.data.purchase_price_ex}`);
+          if(c.invChanged)diffs.push(`发票号 ${c.old.invoice_no||'空'} → ${c.data.invoice_no}`);
+          if(c.poChanged)diffs.push(`PO ${c.old.purchase_po||'空'} → ${c.data.purchase_po}`);
+          return`<div style="margin-bottom:3px;padding:3px 0;border-bottom:1px solid #fde68a">
+            <span style="font-weight:700">${c.old.vin}</span>：${diffs.join('；')}
+          </div>`;
+        }).join('')}
       </div>
       <div style="margin-top:8px;display:flex;gap:8px">
-        <button class="btn sm" style="background:#f59e0b;color:#fff" onclick="applyDiffs(${JSON.stringify(changedRows).replace(/"/g,'&quot;')})">全部覆盖更新</button>
-        <button class="btn bs sm" onclick="this.closest('div').parentElement.innerHTML=''">忽略差异</button>
+        <button class="btn sm" style="background:#f59e0b;color:#fff" id="applyDiffBtn">✓ 全部覆盖更新</button>
+        <button class="btn bs sm" onclick="document.getElementById('t2diffBanner').innerHTML=''">✕ 忽略差异</button>
       </div>
     </div>`;
+    document.getElementById('applyDiffBtn').onclick=()=>applyDiffs(changedRows,'vin_details','t2diffBanner');
   }else{banner.innerHTML=''}
 
-  // Insert new rows
-  let saved=0;
-  for(const d of newRows){
-    try{await api('POST','vin_details',[d]);saved++}catch(e){console.error(e)}
-  }
-  toast(`采购表导入：${saved}条新增${changedRows.length?'，'+changedRows.length+'条有变化需确认':''}${existingRows.length?'，'+existingRows.length+'条已存在无变化':''}`,'ok',5000);
+  toast(`采购表导入：${saved}条新增${changedRows.length?'，'+changedRows.length+'条有变化需确认':''}，无变化${validRows.length-toInsert.length-changedRows.length}条`,'ok',5000);
 }
 
-async function applyDiffs(changedRows){
+async function applyDiffs(changedRows,table,bannerId){
   showL('更新差异数据...');
-  for(const c of changedRows){
-    try{await api('PATCH','vin_details',c.data,`?id=eq.${c.id}`)}catch(e){console.error(e)}
+  for(let i=0;i<changedRows.length;i+=10){
+    const batch=changedRows.slice(i,i+10);
+    for(const c of batch){
+      try{await api('PATCH',table,c.data,`?id=eq.${c.id}`)}catch(e){console.error(e)}
+    }
+    showL(`更新中... ${Math.min(i+10,changedRows.length)}/${changedRows.length}`);
   }
   hideL();toast('差异数据已更新','ok');
-  document.getElementById('t2diffBanner').innerHTML='';
+  document.getElementById(bannerId).innerHTML='';
   await loadData();
 }
 
 async function importSales(rows,keys){
-  const vinCol=keys.find(k=>k.includes('车架号')||k==='vin')||'';
+  const vinCol=keys.find(k=>k.includes('车架号')||k.toLowerCase()==='vin')||'';
   const invCol=keys.find(k=>k.includes('唯一销售单号')||k.includes('销售单号'))||'';
-  const priceCol=keys.find(k=>k.includes('not including GST')||k.includes('不含税')||k.includes('销售价'))||'';
-  const statusCol=keys.find(k=>k.includes('出库状态')||k.includes('状态'))||'';
-  let count=0;
-  for(const row of rows){
-    const vin=(row[vinCol]||'').toString().trim();
-    if(!vin)continue;
-    const saleEx=parseFloat((row[priceCol]||'0').toString().replace(/[$,]/g,''))||0;
-    const status=(row[statusCol]||'').toString().trim();
-    const saleInv=(row[invCol]||'').toString().trim();
-    const updates={sale_inv_no:saleInv||null,sale_price_ex:saleEx||null,
-      sale_status:status.includes('已出库')?'全款':status.includes('未出库')?'未售':(status||null)};
-    const vr=S.vins.find(r=>r.vin===vin);
-    if(vr&&saleEx&&vr.purchase_price_ex){
-      updates.gross_profit=r2(saleEx-Number(vr.purchase_price_ex));
-      updates.gross_profit_rate=saleEx>0?Math.round(updates.gross_profit/saleEx*100):0;
-    }
-    try{
-      const ex=await api('GET','vin_details',null,`?vin=eq.${vin}&store=eq.${S.store}`);
-      if(ex&&ex.length){await api('PATCH','vin_details',updates,`?vin=eq.${vin}&store=eq.${S.store}`);count++}
-    }catch(e){console.error(e)}
+  const priceCol=keys.find(k=>k.includes('不含税销售价')||k.includes('not including GST')||k.includes('不含税'))||'';
+  const statusCol=keys.find(k=>k.includes('销售状态')||k.includes('出库状态')||k.includes('状态'))||'';
+
+  const validRows=rows.filter(r=>(r[vinCol]||'').toString().trim());
+  if(!validRows.length){toast('未找到车架号列','wn');return}
+
+  // Map status values
+  function mapStatus(s){
+    s=(s||'').toString().trim();
+    if(!s)return null;
+    if(s.includes('未售')||s.includes('未出库'))return'未售出';
+    if(s.includes('定金'))return'已收定金';
+    if(s.includes('全款')||s.includes('已出库'))return'已全款';
+    if(s.includes('特殊'))return'特殊';
+    return s;
   }
-  toast(`销售明细导入：${count}条更新`,'ok');
+
+  // Get existing for diff check
+  const existing=await api('GET','vin_details',null,`?store=eq.${S.store}&select=id,vin,sale_inv_no,sale_price_ex,sale_status,purchase_price_ex`)||[];
+  const exMap=Object.fromEntries(existing.map(e=>[e.vin,e]));
+
+  const toUpdate=[],changedRows=[],notFound=[];
+  for(const row of validRows){
+    const vin=(row[vinCol]||'').toString().trim();
+    const saleEx=parseFloat((row[priceCol]||'0').toString().replace(/[$,]/g,''))||0;
+    const status=mapStatus(row[statusCol]);
+    const saleInv=(row[invCol]||'').toString().trim();
+    const updates={sale_inv_no:saleInv||null,sale_price_ex:saleEx||null,sale_status:status};
+    const ex=exMap[vin];
+    if(ex){
+      if(saleEx&&ex.purchase_price_ex){
+        updates.gross_profit=r2(saleEx-Number(ex.purchase_price_ex));
+        updates.gross_profit_rate=saleEx>0?Math.round(updates.gross_profit/saleEx*100):0;
+      }
+      const changed=(ex.sale_inv_no||'')!==saleInv||Math.abs((Number(ex.sale_price_ex)||0)-saleEx)>0.01||(ex.sale_status||'')!==(status||'');
+      if(changed)changedRows.push({data:updates,old:ex,id:ex.id,vin});
+      else toUpdate.push({data:updates,id:ex.id});
+    }else{notFound.push(vin)}
+  }
+
+  // Auto-update unchanged ones silently
+  for(let i=0;i<toUpdate.length;i+=10){
+    for(const u of toUpdate.slice(i,i+10))
+      try{await api('PATCH','vin_details',u.data,`?id=eq.${u.id}`)}catch(e){}
+  }
+
+  // Show diff for changed
+  const banner=document.getElementById('t2diffBanner');
+  if(changedRows.length){
+    banner.innerHTML=`<div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:12px 14px;font-size:12px;color:#92400e">
+      <strong>⚠ ${changedRows.length}条销售数据有变化：</strong>
+      <div style="margin-top:6px;max-height:140px;overflow-y:auto;font-family:var(--mn)">
+        ${changedRows.slice(0,20).map(c=>`<div style="margin-bottom:2px;border-bottom:1px solid #fde68a;padding:2px 0">
+          <span style="font-weight:700">${c.vin}</span>：
+          销售价 ${c.old.sale_price_ex||'空'}→${c.data.sale_price_ex}，
+          状态 ${c.old.sale_status||'空'}→${c.data.sale_status}
+        </div>`).join('')}
+      </div>
+      <div style="margin-top:8px;display:flex;gap:8px">
+        <button class="btn sm" style="background:#f59e0b;color:#fff" id="applySalesDiffBtn">✓ 全部覆盖更新</button>
+        <button class="btn bs sm" onclick="document.getElementById('t2diffBanner').innerHTML=''">✕ 忽略</button>
+      </div>
+    </div>`;
+    document.getElementById('applySalesDiffBtn').onclick=()=>applyDiffs(changedRows,'vin_details','t2diffBanner');
+  }else{banner.innerHTML=''}
+
+  toast(`销售表导入：${toUpdate.length}条更新，${changedRows.length}条有变化需确认${notFound.length?'，'+notFound.length+'条VIN未找到':''}`,'ok',5000);
 }
+
+// ── BIZ CONTRACT UPLOAD ──
+async function handleBizUpload(input){
+  const file=input.files[0];
+  if(!file)return;
+  showL('读取商务表...');
+  try{
+    const ab=await file.arrayBuffer();
+    const wb=XLSX.read(ab,{type:'array'});
+    const ws=wb.Sheets[wb.SheetNames[0]];
+    const rows=XLSX.utils.sheet_to_json(ws,{defval:''});
+    if(!rows.length){hideL();toast('Excel无数据','wn');return}
+    const keys=Object.keys(rows[0]);
+    showL(`处理${rows.length}行商务数据...`);
+    await importBizContracts(rows,keys);
+    hideL();input.value='';
+    await loadData();
+  }catch(e){hideL();toast('读取失败: '+e.message,'er');console.error(e)}
+}
+
+async function importBizContracts(rows,keys){
+  const poCol=keys.find(k=>k.includes('合同号')||k.includes('PO')||k.toLowerCase()==='po')||keys[0];
+  const totCol=keys.find(k=>k.includes('合同总金额')||k.includes('总金额')||k.includes('合同金额'))||'';
+  const p=n=>parseFloat((n||'0').toString().replace(/[$,]/g,''))||0;
+
+  // Get existing biz contracts for diff
+  let existing=[];
+  try{existing=await api('GET','biz_contracts',null,`?store=eq.${S.store}&select=id,po_no,contract_total`)||[]}catch(e){}
+  const exMap=Object.fromEntries(existing.map(e=>[e.po_no,e]));
+
+  // Also get VIN totals by PO for comparison
+  const vinByPO={};
+  S.vins.forEach(v=>{
+    if(!v.purchase_po)return;
+    const po=xPO(v.purchase_po);
+    if(!vinByPO[po])vinByPO[po]=0;
+    vinByPO[po]=r2(vinByPO[po]+(Number(v.purchase_total)||0));
+  });
+
+  const toInsert=[],changedRows=[],diffWithVin=[];
+  for(const row of rows){
+    const po=(row[poCol]||'').toString().trim();
+    if(!po)continue;
+    const total=p(row[totCol]);
+    const poKey=xPO(po);
+    const bizData={store:S.store,po_no:poKey,contract_total:total||null};
+
+    if(exMap[poKey]){
+      const ex=exMap[poKey];
+      if(Math.abs((Number(ex.contract_total)||0)-total)>0.01)
+        changedRows.push({data:bizData,old:ex,id:ex.id,po:poKey,total,oldTotal:ex.contract_total});
+    }else{
+      toInsert.push(bizData);
+    }
+
+    // Check diff with VIN totals
+    const vinTotal=vinByPO[poKey]||0;
+    if(total&&vinTotal&&Math.abs(total-vinTotal)>0.01)
+      diffWithVin.push({po:poKey,bizTotal:total,vinTotal,diff:r2(total-vinTotal)});
+  }
+
+  // Insert new
+  for(let i=0;i<toInsert.length;i+=50){
+    try{await api('POST','biz_contracts',toInsert.slice(i,i+50))}catch(e){
+      // Try one by one if batch fails (table might not exist)
+      for(const d of toInsert.slice(i,i+50))
+        try{await api('POST','biz_contracts',[d])}catch(e2){console.error(e2)}
+    }
+  }
+
+  const banner=document.getElementById('t3diffBanner');
+  let bannerHtml='';
+
+  if(changedRows.length){
+    bannerHtml+=`<div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:12px 14px;font-size:12px;color:#92400e;margin-bottom:8px">
+      <strong>⚠ ${changedRows.length}条合同金额有变化：</strong>
+      <div style="margin-top:5px;max-height:100px;overflow-y:auto;font-family:var(--mn)">
+        ${changedRows.slice(0,15).map(c=>`<div style="border-bottom:1px solid #fde68a;padding:2px 0">
+          ${c.po}：${c.oldTotal||'空'} → ${c.total}
+        </div>`).join('')}
+      </div>
+      <button class="btn sm" style="background:#f59e0b;color:#fff;margin-top:6px" id="applyBizDiffBtn">✓ 覆盖更新</button>
+    </div>`;
+  }
+
+  if(diffWithVin.length){
+    bannerHtml+=`<div style="background:#fff0f0;border:1px solid #fca5a5;border-radius:8px;padding:12px 14px;font-size:12px;color:#991b1b">
+      <strong>🔍 ${diffWithVin.length}个PO的合同总额与发票明细合计不一致（需核实）：</strong>
+      <div style="margin-top:5px;max-height:120px;overflow-y:auto;font-family:var(--mn)">
+        ${diffWithVin.slice(0,20).map(d=>`<div style="border-bottom:1px solid #fecaca;padding:2px 0">
+          <span style="font-weight:700">${d.po}</span>：
+          商务表=${fmt(d.bizTotal)}，发票明细合计=${fmt(d.vinTotal)}，
+          差额=<span style="font-weight:700;color:${d.diff>0?'var(--er)':'var(--ok)'}">${d.diff>0?'+':''}${fmt(d.diff)}</span>
+        </div>`).join('')}
+      </div>
+    </div>`;
+  }
+
+  banner.innerHTML=bannerHtml;
+  if(changedRows.length&&document.getElementById('applyBizDiffBtn'))
+    document.getElementById('applyBizDiffBtn').onclick=()=>applyDiffs(changedRows,'biz_contracts','t3diffBanner');
+
+  toast(`商务表导入：${toInsert.length}条新增${changedRows.length?'，'+changedRows.length+'条有变化':''}${diffWithVin.length?'，'+diffWithVin.length+'个PO与明细不一致':''}`,'ok',5000);
+}
+
+// ── T3 SEARCH ──
+let t3q='';
+function ft3q(v){t3q=v;renderT3()}
+
 
 // ── RENDER T3 ──
 function renderT3(){
@@ -876,10 +1060,16 @@ function renderT3(){
   const reconAmt={};
   S.recons.forEach(r=>{reconAmt[r.recon_no]=(reconAmt[r.recon_no]||0)+Number(r.payment_amount)});
 
-  const pos=Object.entries(poMap).sort((a,b)=>b[1].stmtBal-a[1].stmtBal);
+  let pos=Object.entries(poMap).sort((a,b)=>b[1].stmtBal-a[1].stmtBal);
+  if(t3q){const q=t3q.toLowerCase();pos=pos.filter(([po,d])=>po.toLowerCase().includes(q)||[...d.reconNos].some(r=>r.toLowerCase().includes(q)))}
 
   document.getElementById('t3b').innerHTML=pos.length?pos.map(([po,d])=>{
-    const cTotal=poVinTotal[po]||null;
+    // Contract total: from biz_contracts upload (authoritative)
+    const bizContract=S.biz?S.biz.find(b=>b.po_no===po):null;
+    const cTotal=bizContract?bizContract.contract_total:null;
+    // VIN total for comparison
+    const vinTot=poVinTotal[po]||null;
+    const cDiff=(cTotal&&vinTot&&Math.abs(cTotal-vinTot)>0.01)?r2(cTotal-vinTot):null;
     const recons=[...d.reconNos];
 
     // Paid slots: each unique recon_no = one payment batch
@@ -919,7 +1109,11 @@ function renderT3(){
 
     return`<tr>
       <td class="mono" style="font-weight:600;font-size:12px">${po}</td>
-      <td class="num">${cTotal?fmt(cTotal):'—'}</td>
+      <td class="num">
+        ${cTotal?fmt(cTotal):'—'}
+        ${cDiff!==null?('<div style="font-size:10px;color:'+(cDiff>0?'var(--er)':'var(--ok)')+';font-family:var(--mn)">vs明细:'+(cDiff>0?'+':'')+fmt(cDiff)+'</div>'):''}
+        ${(!cTotal&&vinTot)?('<div style="font-size:11px;color:var(--t3);font-family:var(--mn)">'+fmt(vinTot)+'<br><span style="font-size:10px">(明细合计)</span></div>'):''}
+      </td>
       <td class="num" style="font-weight:700">${fmt(d.stmtBal)}</td>
       <td>${paidCell(paidSlots[0])}</td>
       <td>${paidCell(paidSlots[1])}</td>
