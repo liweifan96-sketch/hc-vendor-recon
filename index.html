@@ -538,7 +538,7 @@ tr.expand-row td {
 
   <div class="help-tip">
     <span>💡</span>
-    <div>双击任意单元格即可修改。修改后会自动保存到数据库。</div>
+    <div>双击任意单元格即可修改。<strong>重传 PDF 时</strong>：本次应付、对账号、付款方式、合同类别、付款日期等手填字段会被保留，金额/日期等会按 PDF 刷新。</div>
   </div>
 
   <div class="table-wrap"><div class="table-scroll">
@@ -583,8 +583,8 @@ tr.expand-row td {
   <div class="help-tip">
     <span>💡</span>
     <div>
-      <strong>使用顺序</strong>：先上传"采购录入表" → 再上传"销售明细表"。
-      系统按 <strong>车架号 VIN</strong> 自动匹配。<strong>双击"销售状态"</strong>可手动修改；其他字段如不一致请重新上传 Excel 覆盖。
+      <strong>使用顺序</strong>：先上传"采购录入表" → 再上传"销售明细表"。系统按 <strong>车架号 VIN</strong> 自动匹配。
+      <strong>重传 Excel 时</strong>：原本已有的字段（包括销售状态）会被严格保护，不会覆盖；只填充原本为空的字段。
     </div>
   </div>
 
@@ -645,8 +645,8 @@ tr.expand-row td {
   <div class="help-tip">
     <span>💡</span>
     <div>
-      每个合同号一行，<strong>左侧点击展开</strong>查看这个合同下的所有 Statement 发票和设备销售情况。
-      点击 <strong>"对账号"</strong> 列可跳转到付款申请页生成汇报。
+      每个合同号一行，<strong>左侧点击展开</strong>查看这个合同下的所有 Statement 发票和设备销售情况。点击 <strong>"对账号"</strong> 列可跳转到付款申请页生成汇报。
+      <strong>重传 Excel 时</strong>：合同号上的对账号和已有金额字段会被严格保护，不会覆盖。
     </div>
   </div>
 
@@ -1049,6 +1049,46 @@ async function importPurchase(rows, keys) {
     return;
   }
 
+  // 步骤：拉取现有数据，做"严格保护"
+  showL('检查已有数据...');
+  const enc = encodeURIComponent(S.store);
+  const existing = await api('GET', 'vin_records', null,
+    `?store=eq.${enc}&select=vin,contract_no,djj_code,supplier,purchase_currency,exchange_rate,product_name,model_spec,purchase_price_ex,gst_rate,purchase_gst,purchase_total,contract_category,origin,stock_in_status,stock_in_date,sale_status&limit=20000`) || [];
+  const existMap = {};
+  for (const r of existing) existMap[r.vin] = r;
+
+  const matchedCount = records.filter(r => existMap[r.vin]).length;
+  const newCount = records.length - matchedCount;
+
+  hideL();
+  if (existing.length > 0 && matchedCount > 0) {
+    const ok = confirm(
+      `采购录入表导入：\n\n` +
+      `  · 更新 ${matchedCount} 个已有 VIN（仅填充原本为空的字段，已有数据不会被覆盖）\n` +
+      `  · 新增 ${newCount} 个 VIN\n` +
+      `  · 销售状态字段不会被改动\n\n` +
+      `是否继续？`
+    );
+    if (!ok) { toast('已取消导入', 'wn'); return; }
+  }
+
+  // 严格保护：原值非空时保留原值，原值为空时才用 Excel 值
+  showL('合并数据...');
+  const protectedFields = ['contract_no','djj_code','supplier','purchase_currency','exchange_rate',
+    'product_name','model_spec','purchase_price_ex','gst_rate','purchase_gst','purchase_total',
+    'contract_category','origin','stock_in_status','stock_in_date'];
+  records = records.map(r => {
+    const exist = existMap[r.vin];
+    if (!exist) return r;
+    const merged = { ...r };
+    for (const f of protectedFields) {
+      if (exist[f] != null && exist[f] !== '') merged[f] = exist[f];
+    }
+    // 销售状态从来不被采购导入修改
+    delete merged.sale_status;
+    return merged;
+  });
+
   let saved = 0, failedBatches = [];
   const BATCH = 100;
   for (let i = 0; i < records.length; i += BATCH) {
@@ -1063,7 +1103,7 @@ async function importPurchase(rows, keys) {
     }
   }
 
-  const detail = `保存 ${saved} · 跳过空 VIN ${emptyVin} · 同表内重复 ${dupes.length}`;
+  const detail = `保存 ${saved} · 新增 ${newCount} · 更新 ${matchedCount} · 跳过空 VIN ${emptyVin} · 同表内重复 ${dupes.length}`;
   if (failedBatches.length) {
     toast(`采购表导入：部分失败`, 'er', `${detail} · ${failedBatches[0].err.substring(0, 100)}`, 8000);
   } else {
@@ -1116,39 +1156,69 @@ async function importSales(rows, keys) {
   // 步骤 2: 拉取现有 vin_records，准备分类（已存在 → upsert更新；不存在 → upsert插入）
   showL('比对现有车架号...');
   const existing = await api('GET', 'vin_records', null,
-    `?store=eq.${encodeURIComponent(S.store)}&select=id,vin,purchase_price_ex&limit=20000`) || [];
+    `?store=eq.${encodeURIComponent(S.store)}&select=id,vin,purchase_price_ex,sale_invoice_no,sale_date,customer,salesperson,sale_currency,sale_price_ex,sale_gst,sale_total_inc_gst,deposit_total,balance_amount,sale_status,stock_out_date&limit=20000`) || [];
   const existMap = {};
   for (const r of existing) existMap[r.vin] = r;
 
-  // 步骤 3: 构造完整 upsert 记录（包含 store + vin，并计算毛利）
+  // 弹窗确认
+  const matchedCount = vins.filter(v => existMap[v]).length;
+  const newCount = vins.length - matchedCount;
+  hideL();
+  if (existing.length > 0 && matchedCount > 0) {
+    const ok = confirm(
+      `销售明细表导入：\n\n` +
+      `  · 更新 ${matchedCount} 个已有 VIN（仅填充原本为空的销售字段）\n` +
+      `  · 新增 ${newCount} 个 VIN\n` +
+      `  · 销售状态：严格保护，已有值绝不覆盖\n\n` +
+      `是否继续？`
+    );
+    if (!ok) { toast('已取消导入', 'wn'); return; }
+  }
+  showL('合并销售数据...');
+
+  // 严格保护字段（包括销售状态）
+  const protectedFields = ['sale_invoice_no','sale_date','customer','salesperson','sale_currency',
+    'sale_price_ex','sale_gst','sale_total_inc_gst','deposit_total','balance_amount',
+    'sale_status','stock_out_date'];
+
+  // 步骤 3: 构造完整 upsert 记录（严格保护 + 计算毛利）
   const upsertRecords = [];
   let withPurchase = 0;
   for (const vin of vins) {
     const u = byVin[vin];
     const exist = existMap[vin];
 
+    // 先合并：原值非空时保留原值
+    const merged = { ...u };
+    if (exist) {
+      for (const f of protectedFields) {
+        if (exist[f] != null && exist[f] !== '') merged[f] = exist[f];
+      }
+    }
+
+    // 用合并后的销售价计算毛利（采购价始终用现有的）
     let grossProfit = null, grossProfitRate = null;
-    if (u.sale_price_ex != null && exist && exist.purchase_price_ex != null) {
-      grossProfit = r2(u.sale_price_ex - Number(exist.purchase_price_ex));
-      grossProfitRate = u.sale_price_ex > 0 ? r2(grossProfit / u.sale_price_ex * 100) : null;
+    if (merged.sale_price_ex != null && exist && exist.purchase_price_ex != null) {
+      grossProfit = r2(Number(merged.sale_price_ex) - Number(exist.purchase_price_ex));
+      grossProfitRate = merged.sale_price_ex > 0 ? r2(grossProfit / Number(merged.sale_price_ex) * 100) : null;
       withPurchase++;
     }
 
     upsertRecords.push({
       store: S.store,
       vin,
-      sale_invoice_no:    u.sale_invoice_no,
-      sale_date:          u.sale_date,
-      customer:           u.customer,
-      salesperson:        u.salesperson,
-      sale_currency:      u.sale_currency,
-      sale_price_ex:      u.sale_price_ex,
-      sale_gst:           u.sale_gst,
-      sale_total_inc_gst: u.sale_total_inc_gst,
-      deposit_total:      u.deposit_total,
-      balance_amount:     u.balance_amount,
-      sale_status:        u.sale_status,
-      stock_out_date:     u.stock_out_date,
+      sale_invoice_no:    merged.sale_invoice_no,
+      sale_date:          merged.sale_date,
+      customer:           merged.customer,
+      salesperson:        merged.salesperson,
+      sale_currency:      merged.sale_currency,
+      sale_price_ex:      merged.sale_price_ex,
+      sale_gst:           merged.sale_gst,
+      sale_total_inc_gst: merged.sale_total_inc_gst,
+      deposit_total:      merged.deposit_total,
+      balance_amount:     merged.balance_amount,
+      sale_status:        merged.sale_status,
+      stock_out_date:     merged.stock_out_date,
       gross_profit:       grossProfit,
       gross_profit_rate:  grossProfitRate,
     });
@@ -1169,8 +1239,7 @@ async function importSales(rows, keys) {
     }
   }
 
-  const newVins = vins.length - Object.keys(existMap).filter(v => byVin[v]).length;
-  const detail = `保存 ${saved} 条 · 含毛利计算 ${withPurchase} · 新建（无采购）${newVins} · 空 VIN ${emptyVin}`;
+  const detail = `保存 ${saved} · 新增 ${newCount} · 更新 ${matchedCount} · 含毛利 ${withPurchase} · 空 VIN ${emptyVin}`;
   if (failedBatches.length) {
     toast('销售表导入：部分失败', 'er', `${detail} · ${failedBatches[0].substring(0, 100)}`, 8000);
   } else {
@@ -1242,6 +1311,43 @@ async function handleBizUpload(input) {
       return;
     }
 
+    // 拉现有合同，做严格保护
+    showL('检查已有数据...');
+    const enc = encodeURIComponent(S.store);
+    const existing = await api('GET', 'biz_contracts', null,
+      `?store=eq.${enc}&select=contract_no,recon_no,paid1_amount,paid1_date,paid2_amount,paid2_date,paid3_amount,paid3_date,paid4_amount,paid4_date,paid5_amount,paid5_date,paid6_amount,paid6_date,paid7_amount,paid7_date,paid8_amount,paid8_date&limit=10000`) || [];
+    const existMap = {};
+    for (const r of existing) existMap[r.contract_no] = r;
+
+    const matchedCount = records.filter(r => existMap[r.contract_no]).length;
+    const newCount = records.length - matchedCount;
+
+    hideL();
+    if (existing.length > 0 && matchedCount > 0) {
+      const ok = confirm(
+        `合同商务表导入：\n\n` +
+        `  · 更新 ${matchedCount} 个已有合同（仅填充原本为空的字段）\n` +
+        `  · 新增 ${newCount} 个合同\n` +
+        `  · 对账号字段：严格保护，已有值不会被覆盖\n\n` +
+        `是否继续？`
+      );
+      if (!ok) { toast('已取消导入', 'wn'); input.value = ''; return; }
+    }
+    showL('合并数据...');
+
+    // 严格保护：所有可手填字段（包括对账号 + 所有已付金额/日期，因为这些可能在网页里手动调过）
+    const protectedFields = Object.keys(BIZ_COL_MAP).filter(f => f !== 'contract_no')
+      .concat(['recon_no']);
+    records = records.map(r => {
+      const exist = existMap[r.contract_no];
+      if (!exist) return r;
+      const merged = { ...r };
+      for (const f of protectedFields) {
+        if (exist[f] != null && exist[f] !== '') merged[f] = exist[f];
+      }
+      return merged;
+    });
+
     let saved = 0;
     const failedDetails = [];
     const BATCH = 50;
@@ -1259,7 +1365,7 @@ async function handleBizUpload(input) {
 
     hideL();
     input.value = '';
-    const detail = `保存 ${saved} · 同表内重复 ${dupes} · 空合同号 ${emptyContract}`;
+    const detail = `保存 ${saved} · 新增 ${newCount} · 更新 ${matchedCount} · 同表内重复 ${dupes} · 空合同号 ${emptyContract}`;
     if (failedDetails.length) {
       toast('商务表导入：部分失败', 'er', detail + ' · ' + failedDetails[0], 8000);
     } else {
@@ -1364,10 +1470,66 @@ async function doImport() {
     const parsed = parseStmt(txt, month);
     if (!parsed.length) { hideL(); toast('未解析到发票', 'er', '请检查 PDF 格式'); return; }
 
+    // 去重（同月同发票号取最后一条）
     const seen = {};
     for (const inv of parsed) seen[`${inv.store}|${inv.statement_month}|${inv.invoice_no}`] = inv;
-    const records = Object.values(seen);
+    let records = Object.values(seen);
 
+    // 步骤 1：拉取该月已有的发票，用于保护手填字段
+    showL('检查已有数据...');
+    const enc = encodeURIComponent(records[0].store);
+    const existing = await api('GET', 'statements_invoices', null,
+      `?store=eq.${enc}&statement_month=eq.${month}&select=invoice_no,to_pay_amount,recon_no,payment_method,contract_type,payment_date,ignored&limit=10000`) || [];
+    const existMap = {};
+    for (const r of existing) existMap[r.invoice_no] = r;
+
+    // 步骤 2：如果有已存在数据，弹窗确认
+    const matchedCount = records.filter(r => existMap[r.invoice_no]).length;
+    const newCount = records.length - matchedCount;
+    let manualKeptCount = 0;
+    for (const r of records) {
+      const exist = existMap[r.invoice_no];
+      if (!exist) continue;
+      if (exist.to_pay_amount != null || exist.recon_no || exist.payment_method ||
+          exist.contract_type || exist.payment_date) {
+        manualKeptCount++;
+      }
+    }
+
+    hideL();
+    if (existing.length > 0) {
+      const ok = confirm(
+        `${month} 月已存在 ${existing.length} 张发票。\n\n` +
+        `本次导入：\n` +
+        `  · 更新 ${matchedCount} 张已有发票（金额/日期等自动字段会被刷新）\n` +
+        `  · 新增 ${newCount} 张发票\n` +
+        `  · 保留 ${manualKeptCount} 张已手填的字段（本次应付、对账号、付款方式、合同类别、付款日期不会被覆盖）\n\n` +
+        `是否继续？`
+      );
+      if (!ok) {
+        toast('已取消导入', 'wn');
+        return;
+      }
+    }
+
+    // 步骤 3：合并：手填字段保护
+    showL('合并数据...');
+    records = records.map(r => {
+      const exist = existMap[r.invoice_no];
+      if (!exist) return r;   // 新发票，原样写入
+      // 已存在 → 保护手填字段
+      const merged = { ...r };
+      if (exist.to_pay_amount  != null) merged.to_pay_amount  = exist.to_pay_amount;
+      else                              merged.to_pay_amount  = r.balance_aud;  // 新刷新的发票，本次应付默认 = 新 balance
+      if (exist.recon_no)               merged.recon_no       = exist.recon_no;
+      if (exist.payment_method)         merged.payment_method = exist.payment_method;
+      if (exist.contract_type)          merged.contract_type  = exist.contract_type;
+      if (exist.payment_date)           merged.payment_date   = exist.payment_date;
+      if (exist.ignored)                merged.ignored        = exist.ignored;
+      return merged;
+    });
+
+    // 步骤 4：批量 upsert
     let saved = 0, failed = 0;
     const BATCH = 50;
     for (let i = 0; i < records.length; i += BATCH) {
@@ -1382,7 +1544,8 @@ async function doImport() {
       }
     }
     hideL();
-    toast('Statement 导入完成', failed ? 'wn' : 'ok', `${parsed.length} 张 · 保存 ${saved} · 失败 ${failed}`);
+    const detail = `保存 ${saved} 张 · 新增 ${newCount} · 更新 ${matchedCount} · 保留手填 ${manualKeptCount}` + (failed ? ` · 失败 ${failed}` : '');
+    toast('Statement 导入完成', failed ? 'wn' : 'ok', detail, 6000);
     await loadData();
   } catch (e) {
     hideL();
