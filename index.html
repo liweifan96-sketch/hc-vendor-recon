@@ -2028,6 +2028,37 @@ function genReport() {
   }
   const uniqueVins = vinRecords;
 
+  // 为每张发票单独算它的关联 VIN 列表（VIN 优先 PO 兜底）
+  const invoiceVins = invoices.map(inv => {
+    const myVins = [];
+    const seen = new Set();
+    if (inv.reference) {
+      const ref = inv.reference.replace(/\s/g, '');
+      // 优先：reference 像 VIN
+      if (!/PO|CS/i.test(ref) && /^[A-Z0-9]{6,}$/i.test(ref)) {
+        const targetVin = ref.toUpperCase();
+        for (const v of S.vinRecords) {
+          if (v.vin && v.vin.toUpperCase() === targetVin && !seen.has(v.vin)) {
+            myVins.push(v);
+            seen.add(v.vin);
+          }
+        }
+      }
+      // 兜底：PO 归一化
+      if (!myVins.length) {
+        const npo = normPO(inv.reference);
+        for (const v of S.vinRecords) {
+          if (!v.contract_no) continue;
+          if (normPO(v.contract_no) === npo && !seen.has(v.vin)) {
+            myVins.push(v);
+            seen.add(v.vin);
+          }
+        }
+      }
+    }
+    return { invoice: inv, vins: myVins };
+  });
+
   // 关联的商务表
   const bizContracts = S.bizContracts.filter(b => contractNos.has(b.contract_no) ||
     [...contractNos].some(c => normPO(c) === normPO(b.contract_no)));
@@ -2070,7 +2101,7 @@ function genReport() {
   }
 
   // 缓存当前报告用于导出
-  S.currentReport = { reconNo, invoices, vinRecords: uniqueVins, bizContracts, contractsList,
+  S.currentReport = { reconNo, invoices, invoiceVins, vinRecords: uniqueVins, bizContracts, contractsList,
     stmtTotal, paid, toPay, bizTotal, vinByStatus, totalSale, totalProfit, warnings };
 
   const ssBadge = (s) => {
@@ -2141,61 +2172,52 @@ function genReport() {
       </div>`}
 
       <div class="report-section">
-        <div class="report-section-title">📄 Statement 发票明细 (${invoices.length} 张)</div>
+        <div class="report-section-title">📄 Statement 发票明细 (${invoices.length} 张 / ${invoiceVins.reduce((s, x) => s + Math.max(1, x.vins.length), 0)} 行)</div>
         <table class="report-table">
           <thead><tr>
             <th>发票号</th><th>发票日期</th><th>到期日</th><th>PO/合同号</th>
             <th class="num">Invoice Amount</th><th class="num">本次应付</th>
+            <th>VIN</th><th>销售单号</th><th>销售状态</th>
+            <th class="num">毛利</th><th class="num">毛利率</th>
           </tr></thead>
-          <tbody>${invoices.map(i => {
+          <tbody>${invoiceVins.map(({ invoice: i, vins }) => {
             const tp = i.to_pay_amount != null ? Number(i.to_pay_amount) : Number(i.balance_aud || 0);
             const custom = i.to_pay_amount != null && Math.abs(Number(i.to_pay_amount) - Number(i.balance_aud || 0)) > 0.01;
-            return `<tr>
-            <td class="mono" style="font-size:12px;color:var(--accent);font-weight:600">${esc(i.invoice_no)}</td>
-            <td class="mono" style="font-size:12px">${esc(i.invoice_date) || '—'}</td>
-            <td class="mono" style="font-size:12px">${esc(i.due_date) || '—'}</td>
-            <td class="mono" style="font-size:11px">${esc(i.reference) || '—'}</td>
-            <td class="num">${fmt(i.invoice_amount)}</td>
-            <td class="num" style="font-weight:700;color:${custom ? 'var(--warn)' : 'var(--accent-2)'};background:var(--accent-soft)">${fmt(tp)}${custom ? ' *' : ''}</td>
-          </tr>`;}).join('')}
+            // 没有关联 VIN：占一行，VIN 相关列显示 —
+            const rowList = vins.length ? vins : [null];
+            return rowList.map((v, idx) => {
+              const isFirst = idx === 0;
+              const rowBorderStyle = idx === rowList.length - 1 ? '' : 'border-bottom:1px dashed var(--border)';
+              // 前 6 列只在第一行显示（rowSpan）
+              const headCells = isFirst ? `
+                <td class="mono" style="font-size:12px;color:var(--accent);font-weight:600;vertical-align:top" rowspan="${rowList.length}">${esc(i.invoice_no)}</td>
+                <td class="mono" style="font-size:12px;vertical-align:top" rowspan="${rowList.length}">${esc(i.invoice_date) || '—'}</td>
+                <td class="mono" style="font-size:12px;vertical-align:top" rowspan="${rowList.length}">${esc(i.due_date) || '—'}</td>
+                <td class="mono" style="font-size:11px;vertical-align:top" rowspan="${rowList.length}">${esc(i.reference) || '—'}</td>
+                <td class="num" style="vertical-align:top" rowspan="${rowList.length}">${fmt(i.invoice_amount)}</td>
+                <td class="num" style="font-weight:700;color:${custom ? 'var(--warn)' : 'var(--accent-2)'};background:var(--accent-soft);vertical-align:top" rowspan="${rowList.length}">${fmt(tp)}${custom ? ' *' : ''}</td>` : '';
+              // VIN 侧
+              const vinCells = v ? `
+                <td class="mono" style="font-size:12px;font-weight:600;${rowBorderStyle}">${esc(v.vin)}</td>
+                <td class="mono" style="font-size:11px;color:var(--warn);${rowBorderStyle}">${esc(v.sale_invoice_no) || '—'}</td>
+                <td style="${rowBorderStyle}">${ssBadge(v.sale_status)}</td>
+                <td class="num" style="font-weight:600;color:${v.gross_profit > 0 ? 'var(--ok)' : v.gross_profit < 0 ? 'var(--err)' : 'var(--text-3)'};${rowBorderStyle}">${v.gross_profit != null ? fmt(v.gross_profit) : '—'}</td>
+                <td class="num" style="color:${v.gross_profit_rate > 20 ? 'var(--ok)' : v.gross_profit_rate > 0 ? 'var(--warn)' : v.gross_profit_rate < 0 ? 'var(--err)' : 'var(--text-3)'};${rowBorderStyle}">${v.gross_profit_rate != null ? v.gross_profit_rate + '%' : '—'}</td>` : `
+                <td colspan="5" style="text-align:center;color:var(--text-3);font-size:11px">未关联设备（请确认 PO/VIN 是否在采购录入表中）</td>`;
+              return `<tr>${headCells}${vinCells}</tr>`;
+            }).join('');
+          }).join('')}
           <tr style="background:var(--surface-2);font-weight:700">
             <td colspan="4" style="text-align:right">合计</td>
             <td class="num">${fmt(stmtTotal)}</td>
             <td class="num" style="color:var(--accent-2);background:var(--accent-soft)">${fmt(toPay)}</td>
+            <td colspan="3" style="text-align:right;font-size:12px;color:var(--text-2)">总毛利</td>
+            <td class="num" style="color:${totalProfit > 0 ? 'var(--ok)' : totalProfit < 0 ? 'var(--err)' : 'var(--text-3)'}">${fmt(totalProfit)}</td>
+            <td class="num">${totalSale > 0 ? r2(totalProfit / totalSale * 100) + '%' : '—'}</td>
           </tr>
           </tbody>
         </table>
         <div style="font-size:11px;color:var(--text-3);margin-top:6px;font-family:var(--mono)">* 标记 = 本次应付已手动调整，与 Balance AUD 不同</div>
-      </div>
-
-      <div class="report-section">
-        <div class="report-section-title">🚜 关联设备销售情况 (${uniqueVins.length} 台)</div>
-        ${uniqueVins.length ? `
-        <table class="report-table">
-          <thead><tr>
-            <th>VIN</th><th>型号</th><th>合同号</th>
-            <th class="num">采购合计</th><th>销售单号</th>
-            <th class="num">销售合计</th><th class="num">毛利</th><th class="num">毛利率</th><th>销售状态</th>
-          </tr></thead>
-          <tbody>${uniqueVins.map(v => `<tr>
-            <td class="mono" style="font-size:12px;font-weight:600">${esc(v.vin)}</td>
-            <td style="font-size:12px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(v.model_spec) || '—'}</td>
-            <td class="mono" style="font-size:11px;color:var(--text-2)">${esc(v.contract_no) || '—'}</td>
-            <td class="num">${fmt(v.purchase_total)}</td>
-            <td class="mono" style="font-size:11px;color:var(--warn)">${esc(v.sale_invoice_no) || '—'}</td>
-            <td class="num">${fmt(v.sale_total_inc_gst)}</td>
-            <td class="num" style="color:${v.gross_profit > 0 ? 'var(--ok)' : v.gross_profit < 0 ? 'var(--err)' : 'var(--text-3)'};font-weight:600">${v.gross_profit != null ? fmt(v.gross_profit) : '—'}</td>
-            <td class="num">${v.gross_profit_rate != null ? v.gross_profit_rate + '%' : '—'}</td>
-            <td>${ssBadge(v.sale_status)}</td>
-          </tr>`).join('')}
-          <tr style="background:var(--surface-2);font-weight:700">
-            <td colspan="5" style="text-align:right">合计</td>
-            <td class="num">${fmt(totalSale)}</td>
-            <td class="num" style="color:${totalProfit > 0 ? 'var(--ok)' : 'var(--err)'}">${fmt(totalProfit)}</td>
-            <td colspan="2"></td>
-          </tr>
-          </tbody>
-        </table>` : '<div class="empty-text" style="color:var(--text-3)">未找到关联设备（合同号未在采购录入表中）</div>'}
       </div>
 
       <div style="text-align:right;font-size:11px;color:var(--text-3);margin-top:24px;border-top:1px solid var(--border);padding-top:12px">
@@ -2239,26 +2261,30 @@ function expReport() {
   }
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(summary), '汇总');
 
-  // Sheet 2: 发票
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(
-    r.invoices.map(i => ({
-      '发票号': i.invoice_no, '发票日期': i.invoice_date, '到期日': i.due_date,
-      'PO/合同号': i.reference, 'Invoice Amount': i.invoice_amount,
-      'Balance AUD': i.balance_aud,
-      '本次应付': i.to_pay_amount != null ? i.to_pay_amount : i.balance_aud,
-      '已付': i.payments,
-    }))
-  ), 'Statement发票');
-
-  // Sheet 3: 设备
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(
-    r.vinRecords.map(v => ({
-      'VIN': v.vin, '型号': v.model_spec, '合同号': v.contract_no,
-      '采购合计': v.purchase_total, '销售单号': v.sale_invoice_no,
-      '销售合计(含税)': v.sale_total_inc_gst, '毛利': v.gross_profit,
-      '毛利率%': v.gross_profit_rate, '销售状态': v.sale_status,
-    }))
-  ), '关联设备');
+  // Sheet 2: 发票明细（按 VIN 展开多行，和网页显示一致）
+  const sheet2Rows = [];
+  for (const { invoice: i, vins } of r.invoiceVins) {
+    const tp = i.to_pay_amount != null ? i.to_pay_amount : i.balance_aud;
+    const rowList = vins.length ? vins : [null];
+    for (let idx = 0; idx < rowList.length; idx++) {
+      const v = rowList[idx];
+      const isFirst = idx === 0;
+      sheet2Rows.push({
+        '发票号': isFirst ? i.invoice_no : '',
+        '发票日期': isFirst ? i.invoice_date : '',
+        '到期日': isFirst ? i.due_date : '',
+        'PO/合同号': isFirst ? i.reference : '',
+        'Invoice Amount': isFirst ? i.invoice_amount : '',
+        '本次应付': isFirst ? tp : '',
+        'VIN': v ? v.vin : '',
+        '销售单号': v ? v.sale_invoice_no : '',
+        '销售状态': v ? v.sale_status : '',
+        '毛利': v ? v.gross_profit : '',
+        '毛利率%': v ? v.gross_profit_rate : '',
+      });
+    }
+  }
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sheet2Rows), '发票明细');
 
   XLSX.writeFile(wb, `付款申请_${r.reconNo}_${S.store}_${today()}.xlsx`);
 }
