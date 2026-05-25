@@ -512,7 +512,7 @@ tr.expand-row td {
   </div>
 
   <div class="stat-row">
-    <div class="stat-card bl"><div class="stat-label">Balance Due AUD</div><div class="stat-value" id="s1">—</div></div>
+    <div class="stat-card bl"><div class="stat-label">本次应付 AUD</div><div class="stat-value" id="s1">—</div></div>
     <div class="stat-card am"><div class="stat-label">已逾期</div><div class="stat-value" id="s2">—</div></div>
     <div class="stat-card"><div class="stat-label">发票总数</div><div class="stat-value" id="s3">—</div></div>
     <div class="stat-card gn"><div class="stat-label">本月新增</div><div class="stat-value" id="s4">—</div></div>
@@ -551,6 +551,7 @@ tr.expand-row td {
         <th class="num">Invoice Amount</th>
         <th class="num">已付</th>
         <th class="num">Balance AUD</th>
+        <th class="num" style="background:var(--accent-soft);color:var(--accent-2)">本次应付</th>
         <th>状态分类</th>
         <th>对账号</th>
         <th>付款方式</th>
@@ -558,7 +559,7 @@ tr.expand-row td {
         <th>付款日期</th>
         <th>操作</th>
       </tr></thead>
-      <tbody id="t1b"><tr><td colspan="13"><div class="empty"><div class="empty-icon">📄</div><div class="empty-text">请先导入 Statement PDF</div></div></td></tr></tbody>
+      <tbody id="t1b"><tr><td colspan="14"><div class="empty"><div class="empty-icon">📄</div><div class="empty-text">请先导入 Statement PDF</div></div></td></tr></tbody>
     </table>
   </div></div>
 </div>
@@ -609,6 +610,7 @@ tr.expand-row td {
   <div class="table-wrap"><div class="table-scroll" style="max-height:70vh">
     <table id="t2t">
       <thead><tr>
+        <th>STMT 发票号</th>
         <th>合同号</th>
         <th>VIN</th>
         <th>型号/规格</th>
@@ -622,7 +624,7 @@ tr.expand-row td {
         <th class="num">毛利率</th>
         <th>销售状态</th>
       </tr></thead>
-      <tbody id="t2b"><tr><td colspan="12"><div class="empty"><div class="empty-icon">📦</div><div class="empty-text">请先上传"采购录入表 Excel"</div></div></td></tr></tbody>
+      <tbody id="t2b"><tr><td colspan="13"><div class="empty"><div class="empty-icon">📦</div><div class="empty-text">请先上传"采购录入表 Excel"</div></div></td></tr></tbody>
     </table>
   </div></div>
 </div>
@@ -1321,6 +1323,7 @@ function parseStmt(txt, month) {
         invoice_amount: nums[0] || 0,
         payments: nums[1] || 0,
         balance_aud: nums[2] || 0,
+        to_pay_amount: nums[2] || 0,   // 默认本次应付 = balance_aud
         month_category: getCat(dates[0] || '', month),
       });
     }
@@ -1439,7 +1442,11 @@ function setM(m, el) {
 
 function updStats() {
   const cur = S.stmtInvoices.filter(r => r.statement_month === S.month && !r.ignored);
-  const total = cur.reduce((s, r) => s + Number(r.balance_aud || 0), 0);
+  // 本次应付优先用 to_pay_amount；为 null 时回退到 balance_aud
+  const total = cur.reduce((s, r) => {
+    const v = r.to_pay_amount != null ? Number(r.to_pay_amount) : Number(r.balance_aud || 0);
+    return s + v;
+  }, 0);
   const now = new Date();
   const ov = cur.filter(r => { const d = parseDue(r.due_date); return d && d < now && r.balance_aud > 0; });
   document.getElementById('s1').textContent = fmt(total);
@@ -1487,6 +1494,9 @@ function renderT1() {
     const pm = r.payment_method === '直接支付' ? '<span class="badge b-ok">直接支付</span>'
             : r.payment_method === '贷款' ? '<span class="badge b-ac">贷款</span>' : '';
     const ct = r.contract_type ? `<span class="badge b-mu">${esc(r.contract_type)}</span>` : '';
+    // 本次应付：优先用 to_pay_amount，未设置时显示 balance_aud（淡色，提示是默认值）
+    const toPayVal = r.to_pay_amount != null ? Number(r.to_pay_amount) : Number(r.balance_aud || 0);
+    const toPayIsCustom = r.to_pay_amount != null && Math.abs(Number(r.to_pay_amount) - Number(r.balance_aud || 0)) > 0.01;
     return `<tr class="${r.ignored ? 'row-ignored' : ''} ${r.month_category === 'new' ? 'row-new' : ''}">
       <td class="ec mono" style="font-size:12px" ondblclick="ecDate('${r.id}','invoice_date',this,'statements_invoices')">${esc(r.invoice_date) || '—'}</td>
       <td class="ec" style="font-weight:600;color:var(--accent);font-family:var(--mono);font-size:12px" ondblclick="ecText('${r.id}','invoice_no',this,'statements_invoices')">${esc(r.invoice_no)}${isOv ? ' <span class="badge b-er">逾期</span>' : ''}</td>
@@ -1495,6 +1505,7 @@ function renderT1() {
       <td class="ec num" ondblclick="ecText('${r.id}','invoice_amount',this,'statements_invoices')">${fmt(r.invoice_amount)}</td>
       <td class="ec num" style="color:var(--ok)" ondblclick="ecText('${r.id}','payments',this,'statements_invoices')">${r.payments > 0 ? fmt(r.payments) : '—'}</td>
       <td class="ec num" style="font-weight:700" ondblclick="ecText('${r.id}','balance_aud',this,'statements_invoices')">${fmt(r.balance_aud)}</td>
+      <td class="ec num" style="background:var(--accent-soft);font-weight:700;color:${toPayIsCustom ? 'var(--warn)' : 'var(--accent-2)'}" title="${toPayIsCustom ? '已手动调整（与 Balance AUD 不同）' : '默认 = Balance AUD'}" ondblclick="ecText('${r.id}','to_pay_amount',this,'statements_invoices')">${fmt(toPayVal)}${toPayIsCustom ? ' *' : ''}</td>
       <td>${cat[r.month_category] || '—'}</td>
       <td class="ec" style="color:var(--warn);font-family:var(--mono);font-size:12px" ondblclick="ecText('${r.id}','recon_no',this,'statements_invoices')">${esc(r.recon_no) || '<span style="color:var(--text-3)">双击设置</span>'}</td>
       <td class="ec" ondblclick="ecSel('${r.id}','payment_method',this,'statements_invoices',['直接支付','贷款'])">${pm || '<span style="color:var(--text-3);font-size:12px">双击设置</span>'}</td>
@@ -1502,7 +1513,7 @@ function renderT1() {
       <td class="ec" style="font-family:var(--mono);font-size:12px" ondblclick="ecDate('${r.id}','payment_date',this,'statements_invoices')">${esc(r.payment_date) || '<span style="color:var(--text-3)">双击设置</span>'}</td>
       <td><button class="btn btn-sec btn-sm" style="color:${r.ignored ? 'var(--ok)' : 'var(--err)'}" onclick="togIgn('${r.id}',${r.ignored})">${r.ignored ? '↩ 恢复' : '忽略'}</button></td>
     </tr>`;
-  }).join('') : '<tr><td colspan="13"><div class="empty"><div class="empty-icon">🔍</div><div class="empty-text">无匹配数据</div></div></td></tr>';
+  }).join('') : '<tr><td colspan="14"><div class="empty"><div class="empty-icon">🔍</div><div class="empty-text">无匹配数据</div></div></td></tr>';
 }
 
 function srt(col) {
@@ -1545,7 +1556,7 @@ function ecText(id, field, td, table) {
     if (val === String(cur || '')) { reRender(table); return; }
     // 数字字段自动转换
     let storeVal = val || null;
-    if (['invoice_amount','payments','balance_aud','purchase_price_ex','sale_price_ex','contract_total'].includes(field)) {
+    if (['invoice_amount','payments','balance_aud','to_pay_amount','purchase_price_ex','sale_price_ex','contract_total'].includes(field)) {
       storeVal = val === '' ? null : pNum(val);
     }
     try {
@@ -1650,12 +1661,47 @@ function ft2pr(v) { S.f2.pr = v; renderT2(); }
 function renderT2() {
   let rows = S.vinRecords;
   const { q, st, pr } = S.f2;
+
+  // 构建关联索引：
+  //   stmtByPO[normPO] = [发票号, ...]
+  //   stmtByVinHint[VIN] = [发票号, ...]  （如果 reference 里直接含 VIN）
+  // 关联优先级：VIN 直接命中 > PO 兜底
+  const stmtByPO = {};
+  const stmtByVin = {};
+  for (const inv of S.stmtInvoices) {
+    if (!inv.reference) continue;
+    const ref = inv.reference;
+    const npo = normPO(ref);
+    if (npo) {
+      if (!stmtByPO[npo]) stmtByPO[npo] = [];
+      stmtByPO[npo].push(inv.invoice_no);
+    }
+    // 如果 reference 看起来像个 VIN（无 PO 字样、纯字母数字），也建索引
+    if (!/PO|CS/i.test(ref) && /^[A-Z0-9]{6,}$/i.test(ref.replace(/\s/g, ''))) {
+      const v = ref.replace(/\s/g, '').toUpperCase();
+      if (!stmtByVin[v]) stmtByVin[v] = [];
+      stmtByVin[v].push(inv.invoice_no);
+    }
+  }
+
+  // 给每行附加 _stmtInvoices（优先 VIN，没有用 PO 兜底）
+  rows = rows.map(r => {
+    let invs = [];
+    if (r.vin && stmtByVin[r.vin.toUpperCase()]) invs = stmtByVin[r.vin.toUpperCase()];
+    else if (r.contract_no) {
+      const npo = normPO(r.contract_no);
+      if (stmtByPO[npo]) invs = stmtByPO[npo];
+    }
+    return { ...r, _stmtInvoices: invs };
+  });
+
   if (q) {
     const lq = q.toLowerCase();
     rows = rows.filter(r =>
       (r.vin             || '').toLowerCase().includes(lq) ||
       (r.contract_no     || '').toLowerCase().includes(lq) ||
-      (r.sale_invoice_no || '').toLowerCase().includes(lq)
+      (r.sale_invoice_no || '').toLowerCase().includes(lq) ||
+      (r._stmtInvoices || []).some(i => i.toLowerCase().includes(lq))
     );
   }
   if (st) rows = rows.filter(r => (r.sale_status || '') === st);
@@ -1676,7 +1722,7 @@ function renderT2() {
   const MAX = 800;
   const display = rows.slice(0, MAX);
   const overflowNote = rows.length > MAX
-    ? `<tr><td colspan="12" style="padding:10px 14px;background:var(--warn-soft);color:#92400e;font-size:12px;text-align:center">⚠ 共 ${rows.length} 条，当前显示前 ${MAX} 条，请使用搜索筛选</td></tr>`
+    ? `<tr><td colspan="13" style="padding:10px 14px;background:var(--warn-soft);color:#92400e;font-size:12px;text-align:center">⚠ 共 ${rows.length} 条，当前显示前 ${MAX} 条，请使用搜索筛选</td></tr>`
     : '';
 
   const ssBadge = (s) => {
@@ -1688,8 +1734,18 @@ function renderT2() {
     return `<span class="badge b-mu">${esc(s)}</span>`;
   };
 
+  // 发票号列：1张直接显示，多张显示"N张"+title悬停查看
+  const stmtCell = (invs) => {
+    if (!invs || !invs.length) return '<span style="color:var(--text-3);font-size:12px">—</span>';
+    if (invs.length === 1) {
+      return `<span class="mono" style="font-size:11px;color:var(--accent)">${esc(invs[0])}</span>`;
+    }
+    return `<span class="mono" style="font-size:11px;color:var(--accent);font-weight:600;cursor:help;border-bottom:1px dashed var(--accent)" title="${esc(invs.join(', '))}">${invs.length} 张</span>`;
+  };
+
   document.getElementById('t2b').innerHTML = display.length
     ? overflowNote + display.map(r => `<tr>
+        <td>${stmtCell(r._stmtInvoices)}</td>
         <td class="mono" style="font-size:11px;color:var(--text-2)">${esc(r.contract_no) || '—'}</td>
         <td class="mono" style="font-weight:600;font-size:12px">${esc(r.vin)}</td>
         <td style="font-size:12px;color:var(--text-2);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.model_spec) || '—'}</td>
@@ -1703,7 +1759,7 @@ function renderT2() {
         <td class="num" style="color:${r.gross_profit_rate > 20 ? 'var(--ok)' : r.gross_profit_rate > 0 ? 'var(--warn)' : 'var(--err)'}">${r.gross_profit_rate != null ? r.gross_profit_rate + '%' : '—'}</td>
         <td class="ec" ondblclick="ecSel('${r.id}','sale_status',this,'vin_records',['已全款','未全款','未售出','特殊'])">${ssBadge(r.sale_status)}</td>
       </tr>`).join('')
-    : '<tr><td colspan="12"><div class="empty"><div class="empty-icon">📦</div><div class="empty-text">' + (S.vinRecords.length ? '无匹配数据' : '请先上传"采购录入表 Excel"') + '</div></div></td></tr>';
+    : '<tr><td colspan="13"><div class="empty"><div class="empty-icon">📦</div><div class="empty-text">' + (S.vinRecords.length ? '无匹配数据' : '请先上传"采购录入表 Excel"') + '</div></div></td></tr>';
 }
 
 // ════════════════════════════════════════════════════════════
@@ -1943,31 +1999,46 @@ function genReport() {
     if (inv.reference) contractNos.add(inv.reference);
   }
 
-  // 关联的 VIN 记录（按合同号归一化匹配）
+  // 关联的 VIN 记录（按合同号归一化匹配；同时再按 VIN 直接关联）
   const vinRecords = [];
+  const vinSeen0 = new Set();
+  // 1) 通过 PO 兜底
   for (const cn of contractNos) {
     const npo = normPO(cn);
     for (const v of S.vinRecords) {
       if (!v.contract_no) continue;
-      if (normPO(v.contract_no) === npo) vinRecords.push(v);
+      if (normPO(v.contract_no) === npo && !vinSeen0.has(v.vin)) {
+        vinRecords.push(v);
+        vinSeen0.add(v.vin);
+      }
     }
   }
-  // 去重
-  const vinSeen = new Set();
-  const uniqueVins = vinRecords.filter(v => {
-    if (vinSeen.has(v.vin)) return false;
-    vinSeen.add(v.vin);
-    return true;
-  });
+  // 2) 优先：reference 像 VIN 时直接命中
+  const vinHints = new Set();
+  for (const inv of invoices) {
+    if (!inv.reference) continue;
+    const ref = inv.reference.replace(/\s/g, '');
+    if (!/PO|CS/i.test(ref) && /^[A-Z0-9]{6,}$/i.test(ref)) vinHints.add(ref.toUpperCase());
+  }
+  for (const v of S.vinRecords) {
+    if (v.vin && vinHints.has(v.vin.toUpperCase()) && !vinSeen0.has(v.vin)) {
+      vinRecords.push(v);
+      vinSeen0.add(v.vin);
+    }
+  }
+  const uniqueVins = vinRecords;
 
   // 关联的商务表
   const bizContracts = S.bizContracts.filter(b => contractNos.has(b.contract_no) ||
     [...contractNos].some(c => normPO(c) === normPO(b.contract_no)));
 
-  // 汇总金额
+  // 汇总金额（toPay 用 to_pay_amount，fallback balance_aud）
   const stmtTotal = invoices.reduce((s, i) => s + Number(i.invoice_amount || 0), 0);
   const paid = invoices.reduce((s, i) => s + Number(i.payments || 0), 0);
-  const toPay = invoices.reduce((s, i) => s + Number(i.balance_aud || 0), 0);
+  const toPay = invoices.reduce((s, i) => {
+    const v = i.to_pay_amount != null ? Number(i.to_pay_amount) : Number(i.balance_aud || 0);
+    return s + v;
+  }, 0);
   const bizTotal = bizContracts.reduce((s, b) => s + Number(b.contract_total || 0), 0);
 
   // VIN 统计
@@ -2023,28 +2094,35 @@ function genReport() {
 
       <div class="report-section">
         <div class="report-section-title">📊 付款汇总</div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:14px">
+          <div style="background:linear-gradient(135deg,var(--accent-soft),#dbeafe);padding:22px;border-radius:var(--r-lg);border:1px solid #bfdbfe">
+            <div class="report-stat-label">💰 本次申请支付</div>
+            <div class="report-stat-value big" style="font-size:32px;margin-top:6px">AUD ${fmt(toPay)}</div>
+            <div style="font-size:11px;color:var(--text-3);margin-top:6px;font-family:var(--mono)">${invoices.some(i => i.to_pay_amount != null && Math.abs(Number(i.to_pay_amount) - Number(i.balance_aud || 0)) > 0.01) ? '（含手动调整）' : '（默认 = Balance）'}</div>
+          </div>
+          <div style="background:var(--surface-2);padding:22px;border-radius:var(--r-lg);border:1px solid var(--border)">
+            <div class="report-stat-label">📋 涉及合同</div>
+            <div class="report-stat-value" style="font-size:32px;margin-top:6px">${contractNos.size} <span style="font-size:18px;color:var(--text-3)">个</span></div>
+            <div style="font-size:11px;color:var(--text-3);margin-top:6px;font-family:var(--mono);max-height:38px;overflow:hidden">${esc(contractsList)}</div>
+          </div>
+          <div style="background:var(--surface-2);padding:22px;border-radius:var(--r-lg);border:1px solid var(--border)">
+            <div class="report-stat-label">📄 Statement 发票</div>
+            <div class="report-stat-value" style="font-size:32px;margin-top:6px">${invoices.length} <span style="font-size:18px;color:var(--text-3)">张</span></div>
+            <div style="font-size:11px;color:var(--text-3);margin-top:6px">账面合计 AUD ${fmt(stmtTotal)}</div>
+          </div>
+        </div>
         <div class="report-summary">
           <div>
-            <div class="report-stat-label">本次申请支付</div>
-            <div class="report-stat-value big">AUD ${fmt(toPay)}</div>
-          </div>
-          <div>
-            <div class="report-stat-label">涉及合同</div>
-            <div class="report-stat-value">${contractNos.size} 个</div>
-            <div style="font-size:11px;color:var(--text-3);margin-top:3px;font-family:var(--mono)">${esc(contractsList)}</div>
-          </div>
-          <div>
-            <div class="report-stat-label">Statement 发票</div>
-            <div class="report-stat-value">${invoices.length} 张</div>
-            <div style="font-size:11px;color:var(--text-3);margin-top:3px">合计 AUD ${fmt(stmtTotal)}</div>
+            <div class="report-stat-label">Balance AUD 合计</div>
+            <div class="report-stat-value">${fmt(invoices.reduce((s, i) => s + Number(i.balance_aud || 0), 0))}</div>
           </div>
           <div>
             <div class="report-stat-label">已付</div>
-            <div class="report-stat-value ok">AUD ${fmt(paid)}</div>
+            <div class="report-stat-value ok">${fmt(paid)}</div>
           </div>
           <div>
             <div class="report-stat-label">商务表合同总额</div>
-            <div class="report-stat-value">${bizTotal ? 'AUD ' + fmt(bizTotal) : '—'}</div>
+            <div class="report-stat-value">${bizTotal ? fmt(bizTotal) : '—'}</div>
           </div>
           <div>
             <div class="report-stat-label">付款方式 / 合同类别</div>
@@ -2067,25 +2145,27 @@ function genReport() {
         <table class="report-table">
           <thead><tr>
             <th>发票号</th><th>发票日期</th><th>到期日</th><th>PO/合同号</th>
-            <th class="num">Invoice Amount</th><th class="num">已付</th><th class="num">余额</th>
+            <th class="num">Invoice Amount</th><th class="num">本次应付</th>
           </tr></thead>
-          <tbody>${invoices.map(i => `<tr>
+          <tbody>${invoices.map(i => {
+            const tp = i.to_pay_amount != null ? Number(i.to_pay_amount) : Number(i.balance_aud || 0);
+            const custom = i.to_pay_amount != null && Math.abs(Number(i.to_pay_amount) - Number(i.balance_aud || 0)) > 0.01;
+            return `<tr>
             <td class="mono" style="font-size:12px;color:var(--accent);font-weight:600">${esc(i.invoice_no)}</td>
             <td class="mono" style="font-size:12px">${esc(i.invoice_date) || '—'}</td>
             <td class="mono" style="font-size:12px">${esc(i.due_date) || '—'}</td>
             <td class="mono" style="font-size:11px">${esc(i.reference) || '—'}</td>
             <td class="num">${fmt(i.invoice_amount)}</td>
-            <td class="num" style="color:var(--ok)">${i.payments > 0 ? fmt(i.payments) : '—'}</td>
-            <td class="num" style="font-weight:700">${fmt(i.balance_aud)}</td>
-          </tr>`).join('')}
+            <td class="num" style="font-weight:700;color:${custom ? 'var(--warn)' : 'var(--accent-2)'};background:var(--accent-soft)">${fmt(tp)}${custom ? ' *' : ''}</td>
+          </tr>`;}).join('')}
           <tr style="background:var(--surface-2);font-weight:700">
             <td colspan="4" style="text-align:right">合计</td>
             <td class="num">${fmt(stmtTotal)}</td>
-            <td class="num" style="color:var(--ok)">${fmt(paid)}</td>
-            <td class="num" style="color:var(--err)">${fmt(toPay)}</td>
+            <td class="num" style="color:var(--accent-2);background:var(--accent-soft)">${fmt(toPay)}</td>
           </tr>
           </tbody>
         </table>
+        <div style="font-size:11px;color:var(--text-3);margin-top:6px;font-family:var(--mono)">* 标记 = 本次应付已手动调整，与 Balance AUD 不同</div>
       </div>
 
       <div class="report-section">
@@ -2164,7 +2244,9 @@ function expReport() {
     r.invoices.map(i => ({
       '发票号': i.invoice_no, '发票日期': i.invoice_date, '到期日': i.due_date,
       'PO/合同号': i.reference, 'Invoice Amount': i.invoice_amount,
-      '已付': i.payments, '余额': i.balance_aud,
+      'Balance AUD': i.balance_aud,
+      '本次应付': i.to_pay_amount != null ? i.to_pay_amount : i.balance_aud,
+      '已付': i.payments,
     }))
   ), 'Statement发票');
 
@@ -2191,6 +2273,7 @@ function expT1() {
     '发票日期': r.invoice_date, '发票号': r.invoice_no, 'PO/合同号': r.reference,
     '到期日': r.due_date, 'Invoice Amount': r.invoice_amount,
     '已付': r.payments, 'Balance AUD': r.balance_aud,
+    '本次应付': r.to_pay_amount != null ? r.to_pay_amount : r.balance_aud,
     '状态分类': r.month_category, '对账号': r.recon_no,
     '付款方式': r.payment_method, '合同类别': r.contract_type, '付款日期': r.payment_date,
   }));
