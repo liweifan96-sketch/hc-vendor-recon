@@ -482,6 +482,7 @@ tr.expand-row td {
     <button class="tab" data-tab="t4" onclick="sw('t4',this)">💰 付款申请</button>
   </div>
   <div class="nav-right">
+    <button class="btn btn-sec btn-sm" onclick="openDataMgmt()" style="border-color:var(--border-2)">🛡️ 数据管理</button>
     <div class="store-switch">
       <button class="store-btn on" onclick="setSt('悉尼',this)">悉尼</button>
       <button class="store-btn perth" onclick="setSt('珀斯',this)">珀斯</button>
@@ -731,6 +732,101 @@ tr.expand-row td {
     </div>
   </div>
 </div>
+
+<!-- ═══ 数据管理 MODAL ═══ -->
+<div class="modal" id="dmMo">
+  <div class="modal-body" style="width:780px">
+    <div class="modal-title">🛡️ 数据管理</div>
+    <div class="dm-tabs" style="display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:18px">
+      <button class="dm-tab on" onclick="dmSw('dm1',this)" data-dm="dm1">📊 数据体检</button>
+      <button class="dm-tab" onclick="dmSw('dm2',this)" data-dm="dm2">🗑️ 清空数据</button>
+    </div>
+
+    <!-- 数据体检 -->
+    <div class="dm-panel on" id="dm1">
+      <div style="font-size:12px;color:var(--text-2);margin-bottom:12px">检查各门店各月数据，识别可疑情况（重复发票号、本次应付与 balance 不一致等）</div>
+      <button class="btn btn-pri btn-sm" onclick="runHealthCheck()" style="margin-bottom:12px">🔍 开始体检</button>
+      <div id="hcResult" style="font-size:12.5px;line-height:1.7"></div>
+    </div>
+
+    <!-- 清空数据 -->
+    <div class="dm-panel" id="dm2" style="display:none">
+      <div style="background:var(--err-soft);border:1px solid #fca5a5;color:#991b1b;padding:11px 14px;border-radius:var(--r-sm);font-size:12px;margin-bottom:14px">
+        ⚠️ <strong>危险操作</strong>：删除后无法恢复。建议导出 Excel 备份后再操作。
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
+        <div>
+          <div style="font-size:12px;font-weight:600;color:var(--text-2);margin-bottom:5px">门店</div>
+          <select class="inp" id="clearStore" style="width:100%" onchange="onClearStoreChange()">
+            <option value="悉尼">悉尼</option>
+            <option value="珀斯">珀斯</option>
+            <option value="布里斯班">布里斯班</option>
+          </select>
+        </div>
+        <div>
+          <div style="font-size:12px;font-weight:600;color:var(--text-2);margin-bottom:5px">月份</div>
+          <select class="inp" id="clearMonth" style="width:100%" onchange="updateClearPreview()">
+            <option value="">— 请选择 —</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="clearPreview" style="background:var(--surface-2);border:1px solid var(--border);padding:12px 14px;border-radius:var(--r);font-size:12.5px;margin-bottom:14px;min-height:50px">
+        请先选择门店和月份
+      </div>
+
+      <div style="margin-bottom:14px">
+        <div style="font-size:12px;font-weight:600;color:var(--text-2);margin-bottom:5px">
+          要继续？请输入门店名 <strong id="confirmStoreLabel" style="color:var(--err)">悉尼</strong> 确认
+        </div>
+        <input class="inp" id="clearConfirm" placeholder="输入门店名..." oninput="updateClearBtn()" style="width:100%">
+      </div>
+
+      <div class="modal-foot">
+        <button class="btn btn-sec" onclick="closeM('dmMo')">取消</button>
+        <button class="btn" id="clearBtn" onclick="doClear()" disabled style="background:#e5e8ec;color:#94a3b8;cursor:not-allowed">🗑️ 永久删除</button>
+      </div>
+    </div>
+
+    <div class="modal-foot" id="dmCloseBtn" style="margin-top:8px">
+      <button class="btn btn-sec" onclick="closeM('dmMo')">关闭</button>
+    </div>
+  </div>
+</div>
+
+<style>
+.dm-tab {
+  padding: 8px 16px;
+  border-radius: 8px 8px 0 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-2);
+  cursor: pointer;
+  border: none;
+  background: none;
+  font-family: var(--sans);
+  transition: all .15s;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.dm-tab:hover { color: var(--text); }
+.dm-tab.on { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+.hc-store-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 12px 14px;
+  margin-bottom: 10px;
+}
+.hc-store-title { font-size: 13px; font-weight: 700; margin-bottom: 8px; color: var(--text); }
+.hc-row { display: flex; gap: 14px; font-size: 12px; padding: 4px 0; border-top: 1px solid var(--border); }
+.hc-row:first-of-type { border-top: none; }
+.hc-row-month { font-family: var(--mono); font-weight: 600; min-width: 75px; color: var(--accent); }
+.hc-row-stat { color: var(--text-2); flex: 1; font-family: var(--mono); font-size: 11.5px; }
+.hc-warn { color: var(--warn); font-weight: 600; }
+.hc-ok { color: var(--ok); }
+</style>
 
 <script>
 // ════════════════════════════════════════════════════════════
@@ -1469,6 +1565,38 @@ async function doImport() {
     showL('提取发票数据...');
     const parsed = parseStmt(txt, month);
     if (!parsed.length) { hideL(); toast('未解析到发票', 'er', '请检查 PDF 格式'); return; }
+
+    // 🆕 月份预检查：从 PDF 识别出的发票日期范围，与你选的月份对比
+    const moMap = { Jan:'01',Feb:'02',Mar:'03',Apr:'04',May:'05',Jun:'06',Jul:'07',Aug:'08',Sep:'09',Oct:'10',Nov:'11',Dec:'12' };
+    const yms = [];
+    for (const r of parsed) {
+      const m = (r.invoice_date || '').match(/(\d{1,2})\s+(\w+)\s+(\d{4})/);
+      if (m && moMap[m[2]]) yms.push(`${m[3]}-${moMap[m[2]]}`);
+    }
+    if (yms.length) {
+      // 统计每个 ym 出现次数，找最多的
+      const cnt = {};
+      for (const y of yms) cnt[y] = (cnt[y] || 0) + 1;
+      const sorted = Object.entries(cnt).sort((a, b) => b[1] - a[1]);
+      const dominantYm = sorted[0][0];
+      const dominantCount = sorted[0][1];
+      const totalWithDate = yms.length;
+      // 如果 PDF 里"主导月份"和你选的月份不同 → 弹警告
+      if (dominantYm !== month && dominantCount / totalWithDate > 0.5) {
+        hideL();
+        const distribution = sorted.slice(0, 3).map(([ym, c]) => `  ${ym}: ${c} 张`).join('\n');
+        const ok = confirm(
+          `⚠️ 月份可能不匹配！\n\n` +
+          `你选择的月份：${month}\n` +
+          `PDF 内识别到的发票日期分布：\n${distribution}\n\n` +
+          `看起来这是 ${dominantYm} 的 PDF。\n` +
+          `继续会把这些发票存到 "${month}" 月份下，可能造成混乱。\n\n` +
+          `是否继续？`
+        );
+        if (!ok) { toast('已取消导入', 'wn', '请重新选择正确的月份'); return; }
+        showL('继续导入...');
+      }
+    }
 
     // 去重（同月同发票号取最后一条）
     const seen = {};
@@ -2484,6 +2612,236 @@ function expT2() {
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, '发票明细');
   XLSX.writeFile(wb, `发票明细_${S.store}.xlsx`);
+}
+
+// ════════════════════════════════════════════════════════════
+//  DATA MANAGEMENT (体检 + 清空)
+// ════════════════════════════════════════════════════════════
+function openDataMgmt() {
+  // 切到体检 tab，清掉旧结果
+  document.querySelectorAll('.dm-tab').forEach(t => t.classList.remove('on'));
+  document.querySelectorAll('.dm-panel').forEach(p => p.style.display = 'none');
+  document.querySelector('[data-dm="dm1"]').classList.add('on');
+  document.getElementById('dm1').style.display = 'block';
+  document.getElementById('dm1').classList.add('on');
+  document.getElementById('hcResult').innerHTML = '';
+  // 预填月份下拉
+  loadClearMonths();
+  document.getElementById('clearConfirm').value = '';
+  updateClearBtn();
+  document.getElementById('dmMo').classList.add('on');
+}
+
+function dmSw(id, btn) {
+  document.querySelectorAll('.dm-tab').forEach(t => t.classList.remove('on'));
+  document.querySelectorAll('.dm-panel').forEach(p => p.style.display = 'none');
+  btn.classList.add('on');
+  document.getElementById(id).style.display = 'block';
+  document.getElementById(id).classList.add('on');
+}
+
+// ── 数据体检 ──
+async function runHealthCheck() {
+  const target = document.getElementById('hcResult');
+  target.innerHTML = '<div style="color:var(--text-2);font-size:12px;font-family:var(--mono)">⏳ 加载中...</div>';
+
+  try {
+    // 一次性拉全部 Statement 发票 + vin_records + biz_contracts
+    const [allStmt, allVin, allBiz] = await Promise.all([
+      api('GET', 'statements_invoices', null, '?select=store,statement_month,invoice_no,balance_aud,to_pay_amount,ignored,reference,recon_no&limit=50000'),
+      api('GET', 'vin_records', null, '?select=store,vin&limit=50000'),
+      api('GET', 'biz_contracts', null, '?select=store,contract_no&limit=20000'),
+    ]);
+
+    const stores = ['悉尼', '珀斯', '布里斯班'];
+    const html = [];
+
+    for (const store of stores) {
+      const stmtAll = (allStmt || []).filter(r => r.store === store);
+      const vinAll  = (allVin  || []).filter(r => r.store === store);
+      const bizAll  = (allBiz  || []).filter(r => r.store === store);
+
+      html.push(`<div class="hc-store-card">`);
+      html.push(`<div class="hc-store-title">📍 ${store}</div>`);
+
+      // Statement 按月
+      const monthsSet = new Set(stmtAll.map(r => r.statement_month));
+      const months = [...monthsSet].sort().reverse();
+
+      if (!months.length) {
+        html.push(`<div class="hc-row"><div class="hc-row-stat" style="color:var(--text-3)">暂无 Statement 数据</div></div>`);
+      } else {
+        for (const m of months) {
+          const rows = stmtAll.filter(r => r.statement_month === m);
+          const active = rows.filter(r => !r.ignored);
+          const sumBal = active.reduce((s, r) => s + Number(r.balance_aud || 0), 0);
+          const sumPay = active.reduce((s, r) => s + Number(r.to_pay_amount != null ? r.to_pay_amount : (r.balance_aud || 0)), 0);
+
+          // 重复发票号
+          const invoiceCnt = {};
+          for (const r of rows) invoiceCnt[r.invoice_no] = (invoiceCnt[r.invoice_no] || 0) + 1;
+          const dupes = Object.entries(invoiceCnt).filter(([_, c]) => c > 1);
+
+          // 手改本次应付
+          const customPay = active.filter(r => r.to_pay_amount != null && Math.abs(r.to_pay_amount - (r.balance_aud || 0)) > 0.01).length;
+          const payDiff = sumPay - sumBal;
+
+          // 已设对账号
+          const withRecon = active.filter(r => r.recon_no).length;
+
+          const warns = [];
+          if (dupes.length) warns.push(`<span class="hc-warn">⚠ ${dupes.length} 个重复发票号</span>`);
+          if (customPay > 0) warns.push(`<span class="hc-warn">${customPay} 张手改本次应付 (差 ${payDiff >= 0 ? '+' : ''}${payDiff.toFixed(2)})</span>`);
+          if (!warns.length) warns.push(`<span class="hc-ok">✓ 健康</span>`);
+
+          html.push(`<div class="hc-row">
+            <div class="hc-row-month">${m}</div>
+            <div class="hc-row-stat">${active.length} 张 (${rows.length - active.length} 忽略) · Balance ${sumBal.toLocaleString('en-AU', {minimumFractionDigits:2,maximumFractionDigits:2})} · 本次应付 ${sumPay.toLocaleString('en-AU', {minimumFractionDigits:2,maximumFractionDigits:2})} · 对账号 ${withRecon} 张</div>
+            <div style="font-size:11px">${warns.join(' · ')}</div>
+          </div>`);
+        }
+      }
+
+      // 业务数据
+      html.push(`<div class="hc-row" style="border-top:1px solid var(--border);margin-top:6px;padding-top:8px">
+        <div class="hc-row-stat" style="color:var(--text-3)">📦 ${vinAll.length} 条 VIN 记录 · 🤝 ${bizAll.length} 个合同</div>
+      </div>`);
+
+      html.push(`</div>`);
+    }
+
+    target.innerHTML = html.join('');
+  } catch (e) {
+    target.innerHTML = `<div style="color:var(--err);font-size:12px">体检失败: ${esc(e.message)}</div>`;
+    console.error(e);
+  }
+}
+
+// ── 清空数据 ──
+async function loadClearMonths() {
+  const store = document.getElementById('clearStore').value;
+  const sel = document.getElementById('clearMonth');
+  sel.innerHTML = '<option value="">⏳ 加载中...</option>';
+  try {
+    const rows = await api('GET', 'statements_invoices', null,
+      `?store=eq.${encodeURIComponent(store)}&select=statement_month&limit=10000`) || [];
+    const months = [...new Set(rows.map(r => r.statement_month))].sort().reverse();
+    sel.innerHTML = '<option value="">— 请选择 —</option>' +
+      months.map(m => `<option value="${m}">${m} (${rows.filter(r => r.statement_month === m).length} 张)</option>`).join('');
+    updateClearPreview();
+  } catch (e) {
+    sel.innerHTML = '<option value="">加载失败</option>';
+  }
+}
+
+async function updateClearPreview() {
+  const store = document.getElementById('clearStore').value;
+  const month = document.getElementById('clearMonth').value;
+  document.getElementById('confirmStoreLabel').textContent = store;
+  document.getElementById('clearConfirm').placeholder = `输入"${store}"...`;
+
+  const preview = document.getElementById('clearPreview');
+  if (!month) {
+    preview.innerHTML = `<span style="color:var(--text-3)">请先选择门店和月份</span>`;
+    updateClearBtn();
+    return;
+  }
+
+  preview.innerHTML = '<span style="color:var(--text-3);font-family:var(--mono)">⏳ 检查中...</span>';
+  try {
+    const rows = await api('GET', 'statements_invoices', null,
+      `?store=eq.${encodeURIComponent(store)}&statement_month=eq.${encodeURIComponent(month)}&select=balance_aud,to_pay_amount,recon_no,payment_method,contract_type,payment_date,ignored&limit=10000`) || [];
+
+    if (!rows.length) {
+      preview.innerHTML = `<span style="color:var(--text-3)">此条件下无数据</span>`;
+      updateClearBtn();
+      return;
+    }
+
+    const total = rows.length;
+    const ignored = rows.filter(r => r.ignored).length;
+    const sumBal = rows.reduce((s, r) => s + Number(r.balance_aud || 0), 0);
+    const withManual = rows.filter(r => r.recon_no || r.payment_method || r.contract_type ||
+      r.payment_date || (r.to_pay_amount != null && Math.abs(r.to_pay_amount - (r.balance_aud || 0)) > 0.01)).length;
+
+    preview.innerHTML = `
+      <div style="font-weight:600;color:var(--err);margin-bottom:6px">⚠ 即将删除 ${store} · ${month}</div>
+      <div style="font-family:var(--mono);font-size:11.5px;color:var(--text-2);line-height:1.7">
+        发票数：<strong>${total}</strong> 张（${ignored} 张已忽略）<br>
+        Balance 合计：<strong>AUD ${sumBal.toLocaleString('en-AU', {minimumFractionDigits:2,maximumFractionDigits:2})}</strong><br>
+        <span style="color:${withManual > 0 ? 'var(--warn)' : 'var(--text-3)'}">⚠ 含 ${withManual} 张手填字段（对账号/付款方式/付款日期/手改本次应付）<br>这些手填数据也会一起被删除！</span>
+      </div>`;
+    updateClearBtn();
+  } catch (e) {
+    preview.innerHTML = `<span style="color:var(--err)">检查失败: ${esc(e.message)}</span>`;
+  }
+}
+
+// 切换门店时，重新加载该门店的月份列表
+function onClearStoreChange() {
+  document.getElementById('clearMonth').value = '';
+  document.getElementById('clearConfirm').value = '';
+  updateClearBtn();
+  loadClearMonths();
+}
+
+function updateClearBtn() {
+  const store = document.getElementById('clearStore').value;
+  const month = document.getElementById('clearMonth').value;
+  const confirmTxt = document.getElementById('clearConfirm').value.trim();
+  const btn = document.getElementById('clearBtn');
+  const canClear = store && month && confirmTxt === store;
+  if (canClear) {
+    btn.disabled = false;
+    btn.style.background = 'var(--err)';
+    btn.style.color = '#fff';
+    btn.style.cursor = 'pointer';
+  } else {
+    btn.disabled = true;
+    btn.style.background = '#e5e8ec';
+    btn.style.color = '#94a3b8';
+    btn.style.cursor = 'not-allowed';
+  }
+}
+
+async function doClear() {
+  const store = document.getElementById('clearStore').value;
+  const month = document.getElementById('clearMonth').value;
+  const confirmTxt = document.getElementById('clearConfirm').value.trim();
+  if (!store || !month || confirmTxt !== store) {
+    toast('请正确填写门店名后再点击', 'wn');
+    return;
+  }
+  // 最后一道 OS 弹窗（兜底）
+  if (!confirm(`最后确认：永久删除 ${store} · ${month} 的所有 Statement 发票？此操作不可恢复。`)) return;
+
+  showL('删除中...');
+  try {
+    // DELETE via PostgREST
+    const r = await fetch(`${SU}/rest/v1/statements_invoices?store=eq.${encodeURIComponent(store)}&statement_month=eq.${encodeURIComponent(month)}`, {
+      method: 'DELETE',
+      headers: {
+        'apikey': SK,
+        'Authorization': `Bearer ${SK}`,
+        'Prefer': 'return=representation',
+      },
+    });
+    if (!r.ok) throw new Error(`${r.status}: ${await r.text()}`);
+    const deleted = await r.json();
+    hideL();
+    toast('删除成功', 'ok', `已删除 ${deleted.length} 张发票`, 5000);
+    document.getElementById('clearConfirm').value = '';
+    updateClearBtn();
+    // 关弹窗 + 刷新数据
+    closeM('dmMo');
+    if (store === S.store) await loadData();
+    // 若清的是当前显示月份，重置一下
+    if (store === S.store && month === S.month) S.month = '';
+  } catch (e) {
+    hideL();
+    toast('删除失败', 'er', e.message);
+    console.error(e);
+  }
 }
 
 // ════════════════════════════════════════════════════════════
