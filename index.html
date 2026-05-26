@@ -646,18 +646,18 @@ tr.expand-row td {
   <div class="help-tip">
     <span>💡</span>
     <div>
-      每个合同号一行，<strong>左侧点击展开</strong>查看这个合同下的所有 Statement 发票和设备销售情况。点击 <strong>"对账号"</strong> 列可跳转到付款申请页生成汇报。
+      每个合同号一行。<strong>左侧点击展开</strong> 查看这个合同下的所有 Statement 发票（含对账号）和设备销售情况。在展开里点击 <strong>"对账号"</strong> 可跳转到付款申请页生成汇报。
       <strong>重传 Excel 时</strong>：合同号上的对账号和已有金额字段会被严格保护，不会覆盖。
     </div>
   </div>
 
   <div class="toolbar">
-    <input class="search-inp" placeholder="搜索合同号 / 对账号 / 供货商..." oninput="ft3q(this.value)">
+    <input class="search-inp" placeholder="搜索合同号 / 对账号..." oninput="ft3q(this.value)">
     <select class="filter-sel" onchange="ft3s(this.value)">
-      <option value="">全部状态</option>
-      <option value="unpaid">未结清</option>
+      <option value="">全部</option>
+      <option value="unpaid">有未付余额</option>
       <option value="paid">已结清</option>
-      <option value="orphan">只有发票无合同</option>
+      <option value="orphan">无商务表</option>
     </select>
     <div style="margin-left:auto;font-size:12px;color:var(--text-3);font-family:var(--mono)" id="t3count"></div>
   </div>
@@ -667,16 +667,11 @@ tr.expand-row td {
       <thead><tr>
         <th style="width:30px"></th>
         <th>合同号</th>
-        <th>供货商</th>
-        <th class="num">商务表总额</th>
+        <th class="num">商务表剩余金额</th>
         <th class="num">发票数</th>
-        <th class="num">Statement 总额</th>
-        <th class="num">已付</th>
-        <th class="num">未付</th>
-        <th>对账号</th>
-        <th>状态</th>
+        <th class="num">STATEMENT 总额</th>
       </tr></thead>
-      <tbody id="t3b"><tr><td colspan="10"><div class="empty"><div class="empty-icon">🤝</div><div class="empty-text">需要先有 Statement 发票或合同商务表数据</div></div></td></tr></tbody>
+      <tbody id="t3b"><tr><td colspan="5"><div class="empty"><div class="empty-icon">🤝</div><div class="empty-text">需要先有 Statement 发票或合同商务表数据</div></div></td></tr></tbody>
     </table>
   </div></div>
 </div>
@@ -755,6 +750,15 @@ tr.expand-row td {
         ⚠️ <strong>危险操作</strong>：删除后无法恢复。建议导出 Excel 备份后再操作。
       </div>
 
+      <div style="margin-bottom:14px">
+        <div style="font-size:12px;font-weight:600;color:var(--text-2);margin-bottom:5px">清空类型</div>
+        <select class="inp" id="clearType" style="width:100%" onchange="onClearTypeChange()">
+          <option value="statements_invoices">📋 Statement 对账（按门店+月份）</option>
+          <option value="vin_records">📦 发票明细（按门店清空全部）</option>
+          <option value="biz_contracts">🤝 商务汇总（按门店清空全部）</option>
+        </select>
+      </div>
+
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
         <div>
           <div style="font-size:12px;font-weight:600;color:var(--text-2);margin-bottom:5px">门店</div>
@@ -764,7 +768,7 @@ tr.expand-row td {
             <option value="布里斯班">布里斯班</option>
           </select>
         </div>
-        <div>
+        <div id="clearMonthWrap">
           <div style="font-size:12px;font-weight:600;color:var(--text-2);margin-bottom:5px">月份</div>
           <select class="inp" id="clearMonth" style="width:100%" onchange="updateClearPreview()">
             <option value="">— 请选择 —</option>
@@ -1106,7 +1110,7 @@ async function importPurchase(rows, keys) {
 
   const seen = new Set();
   const dupes = [];
-  const records = [];
+  let records = [];
   let emptyVin = 0;
 
   for (let i = 0; i < rows.length; i++) {
@@ -1371,7 +1375,7 @@ async function handleBizUpload(input) {
     }
 
     const seen = new Set();
-    const records = [];
+    let records = [];
     let emptyContract = 0, dupes = 0;
 
     for (let i = 0; i < rows.length; i++) {
@@ -2132,43 +2136,37 @@ function renderT3() {
     );
   }
 
-  // 计算金额并过滤状态
+  // 计算金额
   for (const e of entries) {
     e._invCount = e.invoices.length;
     e._stmtTotal = e.invoices.reduce((s, i) => s + Number(i.invoice_amount || 0), 0);
-    e._paid = e.invoices.reduce((s, i) => s + Number(i.payments || 0), 0);
+    // 商务表剩余金额：Excel 里的"剩余金额"字段，没有则为 null
+    e._bizRemaining = e.bizContract?.remaining_amount != null
+      ? Number(e.bizContract.remaining_amount)
+      : (e.bizContract?.contract_total != null ? Number(e.bizContract.contract_total) : null);
+    // 仅供筛选用的"未付"
     e._unpaid = e.invoices.reduce((s, i) => s + Number(i.balance_aud || 0), 0);
-    e._bizTotal = Number(e.bizContract?.contract_total || 0);
   }
 
   if (st === 'paid')   entries = entries.filter(e => e._unpaid <= 0.01 && e._invCount > 0);
   if (st === 'unpaid') entries = entries.filter(e => e._unpaid > 0.01);
   if (st === 'orphan') entries = entries.filter(e => !e.bizContract);
 
-  // 排序：未付款多的在前
-  entries.sort((a, b) => b._unpaid - a._unpaid);
+  // 排序：STATEMENT 总额降序
+  entries.sort((a, b) => b._stmtTotal - a._stmtTotal);
 
   document.getElementById('t3count').textContent = entries.length ? `${entries.length} 个合同号` : '';
 
   const rowsHtml = [];
   for (const e of entries) {
     const isExpanded = S.expandedContracts.has(e.contract_no);
-    const statusBadge = !e.bizContract ? '<span class="badge b-mu">仅发票</span>'
-                      : e._unpaid <= 0.01 && e._invCount > 0 ? '<span class="badge b-ok">已结清</span>'
-                      : '<span class="badge b-wn">未结清</span>';
-    const reconStr = [...e.reconNos].join(', ');
 
     rowsHtml.push(`<tr class="contract-row ${isExpanded ? 'expanded' : ''}" onclick="toggleContract('${esc(e.contract_no)}')">
       <td style="text-align:center"><span class="expand-icon">▶</span></td>
       <td class="mono" style="font-size:12px;font-weight:600;color:var(--accent)">${esc(e.contract_no)}</td>
-      <td style="font-size:12px;color:var(--text-2);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(e.bizContract?.supplier) || '—'}</td>
-      <td class="num">${e._bizTotal ? fmt(e._bizTotal) : '—'}</td>
+      <td class="num" style="color:${e._bizRemaining != null && e._bizRemaining > 0 ? 'var(--warn)' : 'var(--text-3)'}">${e._bizRemaining != null ? fmt(e._bizRemaining) : '—'}</td>
       <td class="num">${e._invCount || '—'}</td>
       <td class="num" style="font-weight:600">${e._stmtTotal ? fmt(e._stmtTotal) : '—'}</td>
-      <td class="num" style="color:var(--ok)">${e._paid ? fmt(e._paid) : '—'}</td>
-      <td class="num" style="font-weight:700;color:${e._unpaid > 0 ? 'var(--err)' : 'var(--text-3)'}">${e._unpaid > 0.01 ? fmt(e._unpaid) : '—'}</td>
-      <td class="mono" style="font-size:11px;color:var(--warn);cursor:pointer" onclick="event.stopPropagation();gotoReport('${esc(reconStr)}')">${esc(reconStr) || '—'}</td>
-      <td>${statusBadge}</td>
     </tr>`);
 
     if (isExpanded) {
@@ -2178,7 +2176,7 @@ function renderT3() {
 
   document.getElementById('t3b').innerHTML = rowsHtml.length
     ? rowsHtml.join('')
-    : '<tr><td colspan="10"><div class="empty"><div class="empty-icon">🤝</div><div class="empty-text">无数据</div></div></td></tr>';
+    : '<tr><td colspan="5"><div class="empty"><div class="empty-icon">🤝</div><div class="empty-text">无数据</div></div></td></tr>';
 }
 
 function toggleContract(cn) {
@@ -2202,7 +2200,7 @@ function renderContractExpand(e) {
           <td class="num">${fmt(i.invoice_amount)}</td>
           <td class="num" style="color:var(--ok)">${i.payments > 0 ? fmt(i.payments) : '—'}</td>
           <td class="num" style="font-weight:600">${fmt(i.balance_aud)}</td>
-          <td class="mono" style="font-size:12px;color:var(--warn)">${esc(i.recon_no) || '—'}</td>
+          <td class="mono" style="font-size:12px;color:var(--warn);cursor:${i.recon_no ? 'pointer' : 'default'}" ${i.recon_no ? `onclick="event.stopPropagation();gotoReport('${esc(i.recon_no)}')"` : ''}>${esc(i.recon_no) || '—'}</td>
         </tr>`).join('')}</tbody>
       </table>`
     : '<div style="color:var(--text-3);font-size:12px">无 Statement 发票</div>';
@@ -2234,7 +2232,7 @@ function renderContractExpand(e) {
       </table>`
     : '<div style="color:var(--text-3);font-size:12px;margin-top:10px">无设备明细</div>';
 
-  return `<tr class="expand-row"><td colspan="10">
+  return `<tr class="expand-row"><td colspan="5">
     <div class="expand-content">
       <div class="expand-title">📄 STATEMENT 发票 (${e.invoices.length})</div>
       ${invHtml}
@@ -2718,6 +2716,22 @@ async function runHealthCheck() {
 }
 
 // ── 清空数据 ──
+function onClearTypeChange() {
+  const type = document.getElementById('clearType').value;
+  const wrap = document.getElementById('clearMonthWrap');
+  if (type === 'statements_invoices') {
+    wrap.style.display = '';
+    loadClearMonths();
+  } else {
+    // 发票明细和商务汇总不需要月份
+    wrap.style.display = 'none';
+    document.getElementById('clearMonth').value = '';
+    updateClearPreview();
+  }
+  document.getElementById('clearConfirm').value = '';
+  updateClearBtn();
+}
+
 async function loadClearMonths() {
   const store = document.getElementById('clearStore').value;
   const sel = document.getElementById('clearMonth');
@@ -2735,13 +2749,16 @@ async function loadClearMonths() {
 }
 
 async function updateClearPreview() {
+  const type = document.getElementById('clearType').value;
   const store = document.getElementById('clearStore').value;
   const month = document.getElementById('clearMonth').value;
   document.getElementById('confirmStoreLabel').textContent = store;
   document.getElementById('clearConfirm').placeholder = `输入"${store}"...`;
 
   const preview = document.getElementById('clearPreview');
-  if (!month) {
+
+  // Statement 需要月份
+  if (type === 'statements_invoices' && !month) {
     preview.innerHTML = `<span style="color:var(--text-3)">请先选择门店和月份</span>`;
     updateClearBtn();
     return;
@@ -2749,48 +2766,89 @@ async function updateClearPreview() {
 
   preview.innerHTML = '<span style="color:var(--text-3);font-family:var(--mono)">⏳ 检查中...</span>';
   try {
-    const rows = await api('GET', 'statements_invoices', null,
-      `?store=eq.${encodeURIComponent(store)}&statement_month=eq.${encodeURIComponent(month)}&select=balance_aud,to_pay_amount,recon_no,payment_method,contract_type,payment_date,ignored&limit=10000`) || [];
-
-    if (!rows.length) {
-      preview.innerHTML = `<span style="color:var(--text-3)">此条件下无数据</span>`;
-      updateClearBtn();
-      return;
+    if (type === 'statements_invoices') {
+      // Statement: 按门店+月份
+      const rows = await api('GET', 'statements_invoices', null,
+        `?store=eq.${encodeURIComponent(store)}&statement_month=eq.${encodeURIComponent(month)}&select=balance_aud,to_pay_amount,recon_no,payment_method,contract_type,payment_date,ignored&limit=10000`) || [];
+      if (!rows.length) {
+        preview.innerHTML = `<span style="color:var(--text-3)">此条件下无数据</span>`;
+        updateClearBtn();
+        return;
+      }
+      const total = rows.length;
+      const ignored = rows.filter(r => r.ignored).length;
+      const sumBal = rows.reduce((s, r) => s + Number(r.balance_aud || 0), 0);
+      const withManual = rows.filter(r => r.recon_no || r.payment_method || r.contract_type ||
+        r.payment_date || (r.to_pay_amount != null && Math.abs(r.to_pay_amount - (r.balance_aud || 0)) > 0.01)).length;
+      preview.innerHTML = `
+        <div style="font-weight:600;color:var(--err);margin-bottom:6px">⚠ 即将删除 Statement 对账 · ${store} · ${month}</div>
+        <div style="font-family:var(--mono);font-size:11.5px;color:var(--text-2);line-height:1.7">
+          发票数：<strong>${total}</strong> 张（${ignored} 张已忽略）<br>
+          Balance 合计：<strong>AUD ${sumBal.toLocaleString('en-AU', {minimumFractionDigits:2,maximumFractionDigits:2})}</strong><br>
+          <span style="color:${withManual > 0 ? 'var(--warn)' : 'var(--text-3)'}">⚠ 含 ${withManual} 张手填字段（对账号/付款方式/付款日期/手改本次应付）<br>这些手填数据也会一起被删除！</span>
+        </div>`;
+    } else if (type === 'vin_records') {
+      // 发票明细：按门店全部
+      const rows = await api('GET', 'vin_records', null,
+        `?store=eq.${encodeURIComponent(store)}&select=vin,sale_status,sale_invoice_no&limit=20000`) || [];
+      if (!rows.length) {
+        preview.innerHTML = `<span style="color:var(--text-3)">此门店暂无 VIN 记录</span>`;
+        updateClearBtn();
+        return;
+      }
+      const withSaleStatus = rows.filter(r => r.sale_status).length;
+      const withSale = rows.filter(r => r.sale_invoice_no).length;
+      preview.innerHTML = `
+        <div style="font-weight:600;color:var(--err);margin-bottom:6px">⚠ 即将删除 发票明细 · ${store} · 全部</div>
+        <div style="font-family:var(--mono);font-size:11.5px;color:var(--text-2);line-height:1.7">
+          VIN 记录：<strong>${rows.length}</strong> 条<br>
+          已关联销售单：<strong>${withSale}</strong> 条<br>
+          <span style="color:${withSaleStatus > 0 ? 'var(--warn)' : 'var(--text-3)'}">⚠ 含 ${withSaleStatus} 条已设置销售状态<br>清空后需要重新上传 Excel + 重新设置销售状态</span>
+        </div>`;
+    } else if (type === 'biz_contracts') {
+      // 商务汇总：按门店全部
+      const rows = await api('GET', 'biz_contracts', null,
+        `?store=eq.${encodeURIComponent(store)}&select=contract_no,recon_no&limit=10000`) || [];
+      if (!rows.length) {
+        preview.innerHTML = `<span style="color:var(--text-3)">此门店暂无合同记录</span>`;
+        updateClearBtn();
+        return;
+      }
+      const withRecon = rows.filter(r => r.recon_no).length;
+      preview.innerHTML = `
+        <div style="font-weight:600;color:var(--err);margin-bottom:6px">⚠ 即将删除 商务汇总 · ${store} · 全部</div>
+        <div style="font-family:var(--mono);font-size:11.5px;color:var(--text-2);line-height:1.7">
+          合同数：<strong>${rows.length}</strong> 个<br>
+          <span style="color:${withRecon > 0 ? 'var(--warn)' : 'var(--text-3)'}">⚠ 含 ${withRecon} 个已设置对账号<br>清空后这些手填的对账号会丢失</span>
+        </div>`;
     }
-
-    const total = rows.length;
-    const ignored = rows.filter(r => r.ignored).length;
-    const sumBal = rows.reduce((s, r) => s + Number(r.balance_aud || 0), 0);
-    const withManual = rows.filter(r => r.recon_no || r.payment_method || r.contract_type ||
-      r.payment_date || (r.to_pay_amount != null && Math.abs(r.to_pay_amount - (r.balance_aud || 0)) > 0.01)).length;
-
-    preview.innerHTML = `
-      <div style="font-weight:600;color:var(--err);margin-bottom:6px">⚠ 即将删除 ${store} · ${month}</div>
-      <div style="font-family:var(--mono);font-size:11.5px;color:var(--text-2);line-height:1.7">
-        发票数：<strong>${total}</strong> 张（${ignored} 张已忽略）<br>
-        Balance 合计：<strong>AUD ${sumBal.toLocaleString('en-AU', {minimumFractionDigits:2,maximumFractionDigits:2})}</strong><br>
-        <span style="color:${withManual > 0 ? 'var(--warn)' : 'var(--text-3)'}">⚠ 含 ${withManual} 张手填字段（对账号/付款方式/付款日期/手改本次应付）<br>这些手填数据也会一起被删除！</span>
-      </div>`;
     updateClearBtn();
   } catch (e) {
     preview.innerHTML = `<span style="color:var(--err)">检查失败: ${esc(e.message)}</span>`;
   }
 }
 
-// 切换门店时，重新加载该门店的月份列表
 function onClearStoreChange() {
-  document.getElementById('clearMonth').value = '';
+  const type = document.getElementById('clearType').value;
   document.getElementById('clearConfirm').value = '';
   updateClearBtn();
-  loadClearMonths();
+  if (type === 'statements_invoices') {
+    document.getElementById('clearMonth').value = '';
+    loadClearMonths();
+  } else {
+    updateClearPreview();
+  }
 }
 
 function updateClearBtn() {
+  const type = document.getElementById('clearType').value;
   const store = document.getElementById('clearStore').value;
   const month = document.getElementById('clearMonth').value;
   const confirmTxt = document.getElementById('clearConfirm').value.trim();
   const btn = document.getElementById('clearBtn');
-  const canClear = store && month && confirmTxt === store;
+  // Statement 必须选月份，其他不用
+  const monthOK = type === 'statements_invoices' ? !!month : true;
+  const canClear = store && monthOK && confirmTxt === store;
   if (canClear) {
     btn.disabled = false;
     btn.style.background = 'var(--err)';
@@ -2805,20 +2863,23 @@ function updateClearBtn() {
 }
 
 async function doClear() {
+  const type = document.getElementById('clearType').value;
   const store = document.getElementById('clearStore').value;
   const month = document.getElementById('clearMonth').value;
   const confirmTxt = document.getElementById('clearConfirm').value.trim();
-  if (!store || !month || confirmTxt !== store) {
-    toast('请正确填写门店名后再点击', 'wn');
-    return;
-  }
-  // 最后一道 OS 弹窗（兜底）
-  if (!confirm(`最后确认：永久删除 ${store} · ${month} 的所有 Statement 发票？此操作不可恢复。`)) return;
+  if (!store || confirmTxt !== store) { toast('请正确填写门店名后再点击', 'wn'); return; }
+  if (type === 'statements_invoices' && !month) { toast('请选择月份', 'wn'); return; }
+
+  const typeLabel = type === 'statements_invoices' ? `Statement 对账 ${month}` :
+                    type === 'vin_records' ? '发票明细全部' : '商务汇总全部';
+
+  if (!confirm(`最后确认：永久删除 ${store} 的 ${typeLabel}？此操作不可恢复。`)) return;
 
   showL('删除中...');
   try {
-    // DELETE via PostgREST
-    const r = await fetch(`${SU}/rest/v1/statements_invoices?store=eq.${encodeURIComponent(store)}&statement_month=eq.${encodeURIComponent(month)}`, {
+    let url = `${SU}/rest/v1/${type}?store=eq.${encodeURIComponent(store)}`;
+    if (type === 'statements_invoices') url += `&statement_month=eq.${encodeURIComponent(month)}`;
+    const r = await fetch(url, {
       method: 'DELETE',
       headers: {
         'apikey': SK,
@@ -2829,14 +2890,14 @@ async function doClear() {
     if (!r.ok) throw new Error(`${r.status}: ${await r.text()}`);
     const deleted = await r.json();
     hideL();
-    toast('删除成功', 'ok', `已删除 ${deleted.length} 张发票`, 5000);
+    toast('删除成功', 'ok', `已删除 ${deleted.length} 条`, 5000);
     document.getElementById('clearConfirm').value = '';
     updateClearBtn();
-    // 关弹窗 + 刷新数据
     closeM('dmMo');
-    if (store === S.store) await loadData();
-    // 若清的是当前显示月份，重置一下
-    if (store === S.store && month === S.month) S.month = '';
+    if (store === S.store) {
+      if (type === 'statements_invoices' && month === S.month) S.month = '';
+      await loadData();
+    }
   } catch (e) {
     hideL();
     toast('删除失败', 'er', e.message);
