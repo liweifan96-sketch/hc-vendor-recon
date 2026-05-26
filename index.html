@@ -584,19 +584,21 @@ tr.expand-row td {
   <div class="help-tip">
     <span>💡</span>
     <div>
-      <strong>使用顺序</strong>：先上传"采购录入表" → 再上传"销售明细表"。系统按 <strong>车架号 VIN</strong> 自动匹配。
-      <strong>重传 Excel 时</strong>：原本已有的字段（包括销售状态）会被严格保护，不会覆盖；只填充原本为空的字段。
+      <strong>使用顺序</strong>：先上传"采购录入表" → 再上传"销售明细表"。系统按 <strong>VIN</strong> 自动匹配；按 VIN 优先、PO 兜底匹配 STMT 发票。<br>
+      <strong>差额列</strong> = STMT 发票金额 - 采购合计：正数（红）= STMT 多收钱；负数（黄）= 采购表多记钱。<br>
+      <strong>双击</strong> 可改：采购价、销售价（自动重算 GST/合计/毛利/毛利率）、销售单号、销售状态。<strong>重传 Excel 时</strong>：原本已有的字段会被严格保护，只填充原本为空的字段。
     </div>
   </div>
 
   <div class="toolbar">
-    <input class="search-inp" placeholder="搜索 VIN / 合同号 / 销售单号..." oninput="ft2q(this.value)">
+    <input class="search-inp" placeholder="搜索 VIN / 合同号 / 销售单号 / STMT 发票号..." oninput="ft2q(this.value)">
     <select class="filter-sel" onchange="ft2st(this.value)">
       <option value="">全部销售状态</option>
       <option value="已全款">已全款</option>
       <option value="未全款">未全款</option>
       <option value="未售出">未售出</option>
       <option value="特殊">特殊</option>
+      <option value="租赁">租赁</option>
     </select>
     <select class="filter-sel" onchange="ft2pr(this.value)">
       <option value="">毛利率 全部</option>
@@ -611,21 +613,23 @@ tr.expand-row td {
   <div class="table-wrap"><div class="table-scroll" style="max-height:70vh">
     <table id="t2t">
       <thead><tr>
-        <th>STMT 发票号</th>
         <th>合同号</th>
         <th>VIN</th>
         <th>型号/规格</th>
         <th class="num" style="border-left:2px solid var(--border)">采购价(不含税)</th>
         <th class="num">GST</th>
         <th class="num">采购合计</th>
-        <th>销售单号</th>
-        <th class="num" style="border-left:2px solid var(--border)">销售价(不含税)</th>
+        <th style="border-left:2px solid var(--border)">STMT 发票号</th>
+        <th class="num">STMT 发票金额</th>
+        <th class="num">差额</th>
+        <th style="border-left:2px solid var(--border)">销售单号</th>
+        <th class="num">销售价(不含税)</th>
         <th class="num">销售合计(含税)</th>
         <th class="num">毛利</th>
         <th class="num">毛利率</th>
         <th>销售状态</th>
       </tr></thead>
-      <tbody id="t2b"><tr><td colspan="13"><div class="empty"><div class="empty-icon">📦</div><div class="empty-text">请先上传"采购录入表 Excel"</div></div></td></tr></tbody>
+      <tbody id="t2b"><tr><td colspan="15"><div class="empty"><div class="empty-icon">📦</div><div class="empty-text">请先上传"采购录入表 Excel"</div></div></td></tr></tbody>
     </table>
   </div></div>
 </div>
@@ -646,18 +650,24 @@ tr.expand-row td {
   <div class="help-tip">
     <span>💡</span>
     <div>
-      每个合同号一行。<strong>左侧点击展开</strong> 查看这个合同下的所有 Statement 发票（含对账号）和设备销售情况。在展开里点击 <strong>"对账号"</strong> 可跳转到付款申请页生成汇报。
-      <strong>重传 Excel 时</strong>：合同号上的对账号和已有金额字段会被严格保护，不会覆盖。
+      <strong>📒 商务表内合同</strong>：来自你上传的合同商务表 Excel，合同数与 Excel 一致；发票数和 STATEMENT 总额由系统按合同号检索 Statement 对账自动汇总。<br>
+      <strong>⚠️ 仅 Statement、未在商务表</strong>：Statement 里出现了但你的商务表 Excel 里没有的合同号——可能是 Statement 写错了 PO，或商务表漏录。<br>
+      左侧 <strong>▶ 点击展开</strong> 可查看该合同下所有 Statement 发票 + 对账号 + 设备明细。
     </div>
+  </div>
+
+  <div style="display:flex;gap:2px;border-bottom:1px solid var(--border);margin-bottom:14px">
+    <button class="t3-subtab on" id="t3SubTabMain" onclick="setT3SubTab('main')" style="padding:9px 16px;border-radius:8px 8px 0 0;font-size:13px;font-weight:600;color:var(--accent);cursor:pointer;border:none;background:none;border-bottom:2px solid var(--accent);margin-bottom:-1px;font-family:var(--sans)">📒 商务表内合同</button>
+    <button class="t3-subtab" id="t3SubTabOnly" onclick="setT3SubTab('onlyStmt')" style="padding:9px 16px;border-radius:8px 8px 0 0;font-size:13px;font-weight:500;color:var(--text-2);cursor:pointer;border:none;background:none;border-bottom:2px solid transparent;margin-bottom:-1px;font-family:var(--sans)">⚠️ 仅 Statement、未在商务表</button>
   </div>
 
   <div class="toolbar">
     <input class="search-inp" placeholder="搜索合同号 / 对账号..." oninput="ft3q(this.value)">
     <select class="filter-sel" onchange="ft3s(this.value)">
       <option value="">全部</option>
-      <option value="unpaid">有未付余额</option>
-      <option value="paid">已结清</option>
-      <option value="orphan">无商务表</option>
+      <option value="unpaid">商务表剩余 &gt; 0</option>
+      <option value="paid">商务表已结清</option>
+      <option value="novoice">无关联 Statement 发票</option>
     </select>
     <div style="margin-left:auto;font-size:12px;color:var(--text-3);font-family:var(--mono)" id="t3count"></div>
   </div>
@@ -816,6 +826,8 @@ tr.expand-row td {
 }
 .dm-tab:hover { color: var(--text); }
 .dm-tab.on { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+.t3-subtab:hover { color: var(--text) !important; }
+.t3-subtab.on { color: var(--accent) !important; border-bottom-color: var(--accent) !important; font-weight: 600 !important; }
 .hc-store-card {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -919,6 +931,7 @@ const S = {
   f1: { q: '', st: '', pay: '' },
   f2: { q: '', st: '', pr: '' },
   f3: { q: '', st: '' },
+  t3SubTab: 'main',
   expandedContracts: new Set(),
   currentReport: null,  // 当前付款申请数据，导出 Excel 用
 };
@@ -1854,9 +1867,33 @@ function ecText(id, field, td, table) {
     if (['invoice_amount','payments','balance_aud','to_pay_amount','purchase_price_ex','sale_price_ex','contract_total'].includes(field)) {
       storeVal = val === '' ? null : pNum(val);
     }
+
+    // 改采购价或销售价时：自动重算相关派生字段（GST、合计、毛利、毛利率）
+    let payload = { [field]: storeVal };
+    if (table === 'vin_records' && (field === 'purchase_price_ex' || field === 'sale_price_ex')) {
+      const purch = field === 'purchase_price_ex' ? storeVal : (row?.purchase_price_ex != null ? Number(row.purchase_price_ex) : null);
+      const sale  = field === 'sale_price_ex'     ? storeVal : (row?.sale_price_ex     != null ? Number(row.sale_price_ex)     : null);
+      if (field === 'purchase_price_ex') {
+        payload.purchase_gst   = purch != null ? r2(purch * 0.1) : null;
+        payload.purchase_total = purch != null ? r2(purch * 1.1) : null;
+      }
+      if (field === 'sale_price_ex') {
+        payload.sale_gst           = sale != null ? r2(sale * 0.1) : null;
+        payload.sale_total_inc_gst = sale != null ? r2(sale * 1.1) : null;
+      }
+      // 重算毛利
+      if (purch != null && sale != null) {
+        payload.gross_profit = r2(sale - purch);
+        payload.gross_profit_rate = sale > 0 ? r2((sale - purch) / sale * 100) : null;
+      } else {
+        payload.gross_profit = null;
+        payload.gross_profit_rate = null;
+      }
+    }
+
     try {
-      await api('PATCH', table, { [field]: storeVal }, `?id=eq.${id}`);
-      if (row) row[field] = storeVal;
+      await api('PATCH', table, payload, `?id=eq.${id}`);
+      if (row) Object.assign(row, payload);
       toast('已保存', 'ok', `${field} = ${val || '(空)'}`, 2000);
     } catch (e) {
       toast('保存失败', 'er', e.message);
@@ -1958,24 +1995,25 @@ function renderT2() {
   const { q, st, pr } = S.f2;
 
   // 构建关联索引：
-  //   stmtByPO[normPO] = [发票号, ...]
-  //   stmtByVinHint[VIN] = [发票号, ...]  （如果 reference 里直接含 VIN）
+  //   stmtByPO[normPO]  = [{invoice_no, invoice_amount}, ...]
+  //   stmtByVin[VIN]    = [{invoice_no, invoice_amount}, ...]
   // 关联优先级：VIN 直接命中 > PO 兜底
   const stmtByPO = {};
   const stmtByVin = {};
   for (const inv of S.stmtInvoices) {
     if (!inv.reference) continue;
     const ref = inv.reference;
+    const item = { invoice_no: inv.invoice_no, invoice_amount: Number(inv.invoice_amount || 0) };
     const npo = normPO(ref);
     if (npo) {
       if (!stmtByPO[npo]) stmtByPO[npo] = [];
-      stmtByPO[npo].push(inv.invoice_no);
+      stmtByPO[npo].push(item);
     }
-    // 如果 reference 看起来像个 VIN（无 PO 字样、纯字母数字），也建索引
+    // 如果 reference 看起来像 VIN（无 PO 字样、纯字母数字）
     if (!/PO|CS/i.test(ref) && /^[A-Z0-9]{6,}$/i.test(ref.replace(/\s/g, ''))) {
       const v = ref.replace(/\s/g, '').toUpperCase();
       if (!stmtByVin[v]) stmtByVin[v] = [];
-      stmtByVin[v].push(inv.invoice_no);
+      stmtByVin[v].push(item);
     }
   }
 
@@ -1996,7 +2034,7 @@ function renderT2() {
       (r.vin             || '').toLowerCase().includes(lq) ||
       (r.contract_no     || '').toLowerCase().includes(lq) ||
       (r.sale_invoice_no || '').toLowerCase().includes(lq) ||
-      (r._stmtInvoices || []).some(i => i.toLowerCase().includes(lq))
+      (r._stmtInvoices || []).some(i => i.invoice_no.toLowerCase().includes(lq))
     );
   }
   if (st) rows = rows.filter(r => (r.sale_status || '') === st);
@@ -2017,7 +2055,7 @@ function renderT2() {
   const MAX = 800;
   const display = rows.slice(0, MAX);
   const overflowNote = rows.length > MAX
-    ? `<tr><td colspan="13" style="padding:10px 14px;background:var(--warn-soft);color:#92400e;font-size:12px;text-align:center">⚠ 共 ${rows.length} 条，当前显示前 ${MAX} 条，请使用搜索筛选</td></tr>`
+    ? `<tr><td colspan="15" style="padding:10px 14px;background:var(--warn-soft);color:#92400e;font-size:12px;text-align:center">⚠ 共 ${rows.length} 条，当前显示前 ${MAX} 条，请使用搜索筛选</td></tr>`
     : '';
 
   const ssBadge = (s) => {
@@ -2026,35 +2064,60 @@ function renderT2() {
     if (s === '未全款') return '<span class="badge b-wn">未全款</span>';
     if (s === '未售出') return '<span class="badge b-mu">未售出</span>';
     if (s === '特殊')   return '<span class="badge b-pu">特殊</span>';
+    if (s === '租赁')   return '<span class="badge b-ac">租赁</span>';
     return `<span class="badge b-mu">${esc(s)}</span>`;
   };
 
-  // 发票号列：1张直接显示，多张显示"N张"+title悬停查看
-  const stmtCell = (invs) => {
-    if (!invs || !invs.length) return '<span style="color:var(--text-3);font-size:12px">—</span>';
-    if (invs.length === 1) {
-      return `<span class="mono" style="font-size:11px;color:var(--accent)">${esc(invs[0])}</span>`;
+  // 每行 VIN，按其匹配的 STMT 发票数展开（rowspan 合并前 6 列 + 后 6 列）
+  const html = [];
+  for (const r of display) {
+    const invs = r._stmtInvoices && r._stmtInvoices.length ? r._stmtInvoices : [null];
+    const span = invs.length;
+
+    for (let idx = 0; idx < invs.length; idx++) {
+      const inv = invs[idx];
+      const isFirst = idx === 0;
+      const isLast = idx === invs.length - 1;
+      const rowSep = !isLast ? 'border-bottom:1px dashed var(--border)' : '';
+
+      const purchaseTotal = Number(r.purchase_total || 0);
+      const stmtAmt = inv ? Number(inv.invoice_amount || 0) : null;
+      const diff = inv && purchaseTotal > 0 ? r2(stmtAmt - purchaseTotal) : null;
+      const diffColor = diff == null ? 'var(--text-3)' :
+                        Math.abs(diff) < 0.01 ? 'var(--text-3)' :
+                        diff > 0 ? 'var(--err)' : 'var(--warn)';
+
+      // 前 6 列（合同/VIN/规格/采购）只在第一行出现，rowspan=span
+      const head = isFirst ? `
+        <td class="mono" style="font-size:11px;color:var(--text-2);vertical-align:top" rowspan="${span}">${esc(r.contract_no) || '—'}</td>
+        <td class="mono" style="font-weight:600;font-size:12px;vertical-align:top" rowspan="${span}">${esc(r.vin)}</td>
+        <td style="font-size:12px;color:var(--text-2);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:top" rowspan="${span}">${esc(r.model_spec) || '—'}</td>
+        <td class="num" style="border-left:2px solid var(--border);vertical-align:top" rowspan="${span}">${fmt(r.purchase_price_ex)}</td>
+        <td class="num" style="color:var(--text-3);font-size:11px;vertical-align:top" rowspan="${span}">${fmt(r.purchase_gst)}</td>
+        <td class="num" style="font-weight:600;vertical-align:top" rowspan="${span}">${fmt(r.purchase_total)}</td>` : '';
+
+      // STMT 3 列：每个 VIN 的每张发票一行
+      const stmtCells = `
+        <td class="mono" style="font-size:11px;color:var(--accent);border-left:2px solid var(--border);${rowSep}">${inv ? esc(inv.invoice_no) : '<span style="color:var(--text-3)">—</span>'}</td>
+        <td class="num" style="${rowSep}">${inv ? fmt(stmtAmt) : '—'}</td>
+        <td class="num" style="color:${diffColor};font-weight:600;${rowSep}">${diff == null ? '—' : (diff > 0 ? '+' : '') + fmt(diff)}</td>`;
+
+      // 销售 6 列：销售单号/销售价/合计/毛利/毛利率/状态（只在第一行）
+      const sale = isFirst ? `
+        <td class="ec mono" style="font-size:11px;color:var(--warn);border-left:2px solid var(--border);vertical-align:top" rowspan="${span}" ondblclick="ecText('${r.id}','sale_invoice_no',this,'vin_records')">${esc(r.sale_invoice_no) || '<span style="color:var(--text-3)">双击设置</span>'}</td>
+        <td class="ec num" style="vertical-align:top" rowspan="${span}" ondblclick="ecText('${r.id}','sale_price_ex',this,'vin_records')">${fmt(r.sale_price_ex)}</td>
+        <td class="num" style="vertical-align:top" rowspan="${span}">${fmt(r.sale_total_inc_gst)}</td>
+        <td class="num" style="color:${r.gross_profit > 0 ? 'var(--ok)' : r.gross_profit < 0 ? 'var(--err)' : 'var(--text-3)'};font-weight:600;vertical-align:top" rowspan="${span}">${r.gross_profit != null ? fmt(r.gross_profit) : '—'}</td>
+        <td class="num" style="color:${r.gross_profit_rate > 20 ? 'var(--ok)' : r.gross_profit_rate > 0 ? 'var(--warn)' : r.gross_profit_rate < 0 ? 'var(--err)' : 'var(--text-3)'};vertical-align:top" rowspan="${span}">${r.gross_profit_rate != null ? r.gross_profit_rate + '%' : '—'}</td>
+        <td class="ec" style="vertical-align:top" rowspan="${span}" ondblclick="ecSel('${r.id}','sale_status',this,'vin_records',['已全款','未全款','未售出','特殊','租赁'])">${ssBadge(r.sale_status)}</td>` : '';
+
+      html.push(`<tr>${head}${stmtCells}${sale}</tr>`);
     }
-    return `<span class="mono" style="font-size:11px;color:var(--accent);font-weight:600;cursor:help;border-bottom:1px dashed var(--accent)" title="${esc(invs.join(', '))}">${invs.length} 张</span>`;
-  };
+  }
 
   document.getElementById('t2b').innerHTML = display.length
-    ? overflowNote + display.map(r => `<tr>
-        <td>${stmtCell(r._stmtInvoices)}</td>
-        <td class="mono" style="font-size:11px;color:var(--text-2)">${esc(r.contract_no) || '—'}</td>
-        <td class="mono" style="font-weight:600;font-size:12px">${esc(r.vin)}</td>
-        <td style="font-size:12px;color:var(--text-2);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.model_spec) || '—'}</td>
-        <td class="num" style="border-left:2px solid var(--border)">${fmt(r.purchase_price_ex)}</td>
-        <td class="num" style="color:var(--text-3);font-size:11px">${fmt(r.purchase_gst)}</td>
-        <td class="num" style="font-weight:600">${fmt(r.purchase_total)}</td>
-        <td class="mono" style="font-size:11px;color:var(--warn)">${esc(r.sale_invoice_no) || '—'}</td>
-        <td class="num" style="border-left:2px solid var(--border)">${fmt(r.sale_price_ex)}</td>
-        <td class="num">${fmt(r.sale_total_inc_gst)}</td>
-        <td class="num" style="color:${r.gross_profit > 0 ? 'var(--ok)' : r.gross_profit < 0 ? 'var(--err)' : 'var(--text-3)'};font-weight:600">${r.gross_profit != null ? fmt(r.gross_profit) : '—'}</td>
-        <td class="num" style="color:${r.gross_profit_rate > 20 ? 'var(--ok)' : r.gross_profit_rate > 0 ? 'var(--warn)' : 'var(--err)'}">${r.gross_profit_rate != null ? r.gross_profit_rate + '%' : '—'}</td>
-        <td class="ec" ondblclick="ecSel('${r.id}','sale_status',this,'vin_records',['已全款','未全款','未售出','特殊'])">${ssBadge(r.sale_status)}</td>
-      </tr>`).join('')
-    : '<tr><td colspan="13"><div class="empty"><div class="empty-icon">📦</div><div class="empty-text">' + (S.vinRecords.length ? '无匹配数据' : '请先上传"采购录入表 Excel"') + '</div></div></td></tr>';
+    ? overflowNote + html.join('')
+    : '<tr><td colspan="15"><div class="empty"><div class="empty-icon">📦</div><div class="empty-text">' + (S.vinRecords.length ? '无匹配数据' : '请先上传"采购录入表 Excel"') + '</div></div></td></tr>';
 }
 
 // ════════════════════════════════════════════════════════════
@@ -2065,13 +2128,13 @@ function ft3s(v) { S.f3.st = v; renderT3(); }
 
 // 构造合同号 → 聚合数据 的索引
 function buildContractIndex() {
-  const idx = {};
+  const mainIdx = {};      // 商务表里有的合同
+  const onlyStmtIdx = {};  // 仅在 Statement 里出现的合同
 
-  // 1) 从 biz_contracts 初始化
+  // 1) 主索引：从 biz_contracts 初始化
   for (const c of S.bizContracts) {
-    const key = c.contract_no;
-    idx[key] = {
-      contract_no: key,
+    mainIdx[c.contract_no] = {
+      contract_no: c.contract_no,
       bizContract: c,
       invoices: [],
       vinRecords: [],
@@ -2079,78 +2142,101 @@ function buildContractIndex() {
     };
   }
 
-  // 2) 从 statements_invoices 的 reference 字段匹配合同号
+  // 2) 遍历 Statement 发票：能挂到 biz 就挂主；不能挂就挂 onlyStmt
   for (const inv of S.stmtInvoices) {
     if (!inv.reference) continue;
     const po = normPO(inv.reference);
-    // 在合同索引里找匹配（也尝试归一化的合同号）
     let key = null;
-    if (idx[inv.reference]) key = inv.reference;
+    if (mainIdx[inv.reference]) key = inv.reference;
     else {
-      // 找有相同 normPO 的合同号
-      for (const ck of Object.keys(idx)) {
+      for (const ck of Object.keys(mainIdx)) {
         if (normPO(ck) === po) { key = ck; break; }
       }
     }
-    if (!key) {
-      // 新建一个"只有发票"的合同（orphan）
-      key = inv.reference;
-      idx[key] = { contract_no: key, bizContract: null, invoices: [], vinRecords: [], reconNos: new Set() };
+    if (key) {
+      // 挂到主表
+      mainIdx[key].invoices.push(inv);
+      if (inv.recon_no) mainIdx[key].reconNos.add(inv.recon_no);
+    } else {
+      // 挂到 onlyStmt（按 reference 归一化分组）
+      const groupKey = inv.reference;
+      if (!onlyStmtIdx[groupKey]) {
+        onlyStmtIdx[groupKey] = {
+          contract_no: groupKey, bizContract: null,
+          invoices: [], vinRecords: [], reconNos: new Set(),
+        };
+      }
+      onlyStmtIdx[groupKey].invoices.push(inv);
+      if (inv.recon_no) onlyStmtIdx[groupKey].reconNos.add(inv.recon_no);
     }
-    idx[key].invoices.push(inv);
-    if (inv.recon_no) idx[key].reconNos.add(inv.recon_no);
   }
 
-  // 3) 从 vin_records 按合同号挂载
+  // 3) VIN 记录按合同号挂到主索引（只挂能匹配的；不创建新条目）
   for (const v of S.vinRecords) {
     if (!v.contract_no) continue;
     const po = normPO(v.contract_no);
     let key = null;
-    if (idx[v.contract_no]) key = v.contract_no;
+    if (mainIdx[v.contract_no]) key = v.contract_no;
     else {
-      for (const ck of Object.keys(idx)) {
+      for (const ck of Object.keys(mainIdx)) {
         if (normPO(ck) === po) { key = ck; break; }
       }
     }
+    if (key) mainIdx[key].vinRecords.push(v);
+    // 也尝试挂到 onlyStmt
     if (!key) {
-      key = v.contract_no;
-      idx[key] = { contract_no: key, bizContract: null, invoices: [], vinRecords: [], reconNos: new Set() };
+      for (const ck of Object.keys(onlyStmtIdx)) {
+        if (normPO(ck) === po) { onlyStmtIdx[ck].vinRecords.push(v); break; }
+      }
     }
-    idx[key].vinRecords.push(v);
   }
 
-  return idx;
+  return { main: mainIdx, onlyStmt: onlyStmtIdx };
 }
 
 function renderT3() {
-  const idx = buildContractIndex();
-  let entries = Object.values(idx);
+  const { main, onlyStmt } = buildContractIndex();
+  const subTab = S.t3SubTab || 'main';   // 'main' 或 'onlyStmt'
+
+  // 计算金额（两个索引都算）
+  for (const e of Object.values(main)) {
+    e._invCount = e.invoices.length;
+    e._stmtTotal = e.invoices.reduce((s, i) => s + Number(i.invoice_amount || 0), 0);
+    e._bizRemaining = e.bizContract?.remaining_amount != null
+      ? Number(e.bizContract.remaining_amount)
+      : (e.bizContract?.contract_total != null ? Number(e.bizContract.contract_total) : null);
+  }
+  for (const e of Object.values(onlyStmt)) {
+    e._invCount = e.invoices.length;
+    e._stmtTotal = e.invoices.reduce((s, i) => s + Number(i.invoice_amount || 0), 0);
+    e._bizRemaining = null;
+  }
+
+  const mainCount = Object.keys(main).length;
+  const onlyCount = Object.keys(onlyStmt).length;
+
+  // 更新子 tab 计数
+  const mainTabEl = document.getElementById('t3SubTabMain');
+  const onlyTabEl = document.getElementById('t3SubTabOnly');
+  if (mainTabEl) mainTabEl.textContent = `📒 商务表内合同 (${mainCount})`;
+  if (onlyTabEl) onlyTabEl.textContent = `⚠️ 仅 Statement、未在商务表 (${onlyCount})`;
+
+  let entries = Object.values(subTab === 'main' ? main : onlyStmt);
 
   const { q, st } = S.f3;
   if (q) {
     const lq = q.toLowerCase();
     entries = entries.filter(e =>
       (e.contract_no || '').toLowerCase().includes(lq) ||
-      (e.bizContract?.supplier || '').toLowerCase().includes(lq) ||
       [...e.reconNos].some(r => r.toLowerCase().includes(lq))
     );
   }
 
-  // 计算金额
-  for (const e of entries) {
-    e._invCount = e.invoices.length;
-    e._stmtTotal = e.invoices.reduce((s, i) => s + Number(i.invoice_amount || 0), 0);
-    // 商务表剩余金额：Excel 里的"剩余金额"字段，没有则为 null
-    e._bizRemaining = e.bizContract?.remaining_amount != null
-      ? Number(e.bizContract.remaining_amount)
-      : (e.bizContract?.contract_total != null ? Number(e.bizContract.contract_total) : null);
-    // 仅供筛选用的"未付"
-    e._unpaid = e.invoices.reduce((s, i) => s + Number(i.balance_aud || 0), 0);
+  if (subTab === 'main') {
+    if (st === 'paid')   entries = entries.filter(e => e._bizRemaining != null && e._bizRemaining <= 0.01);
+    if (st === 'unpaid') entries = entries.filter(e => e._bizRemaining != null && e._bizRemaining > 0.01);
+    if (st === 'novoice') entries = entries.filter(e => e._invCount === 0);
   }
-
-  if (st === 'paid')   entries = entries.filter(e => e._unpaid <= 0.01 && e._invCount > 0);
-  if (st === 'unpaid') entries = entries.filter(e => e._unpaid > 0.01);
-  if (st === 'orphan') entries = entries.filter(e => !e.bizContract);
 
   // 排序：STATEMENT 总额降序
   entries.sort((a, b) => b._stmtTotal - a._stmtTotal);
@@ -2174,9 +2260,21 @@ function renderT3() {
     }
   }
 
+  const emptyMsg = subTab === 'main'
+    ? (mainCount === 0 ? '请先上传"合同商务表 Excel"' : '无匹配数据')
+    : (onlyCount === 0 ? '所有 Statement 合同号都已在商务表中（✓ 干净）' : '无匹配数据');
+
   document.getElementById('t3b').innerHTML = rowsHtml.length
     ? rowsHtml.join('')
-    : '<tr><td colspan="5"><div class="empty"><div class="empty-icon">🤝</div><div class="empty-text">无数据</div></div></td></tr>';
+    : `<tr><td colspan="5"><div class="empty"><div class="empty-icon">🤝</div><div class="empty-text">${emptyMsg}</div></div></td></tr>`;
+}
+
+function setT3SubTab(name) {
+  S.t3SubTab = name;
+  S.expandedContracts.clear();
+  document.querySelectorAll('.t3-subtab').forEach(b => b.classList.remove('on'));
+  document.getElementById(name === 'main' ? 't3SubTabMain' : 't3SubTabOnly').classList.add('on');
+  renderT3();
 }
 
 function toggleContract(cn) {
