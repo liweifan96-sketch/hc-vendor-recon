@@ -6,6 +6,7 @@
 <title>HC Forklift · 供应商对账系统</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;700&display=swap');
 
@@ -477,8 +478,6 @@ tr.expand-row td {
   </div>
   <div class="tabs">
     <button class="tab on" data-tab="t1" onclick="sw('t1',this)">📋 Statement对账</button>
-    <button class="tab" data-tab="t2" onclick="sw('t2',this)">📦 发票明细</button>
-    <button class="tab" data-tab="t3" onclick="sw('t3',this)">🤝 商务汇总</button>
     <button class="tab" data-tab="t4" onclick="sw('t4',this)">💰 付款申请</button>
   </div>
   <div class="nav-right">
@@ -508,6 +507,8 @@ tr.expand-row td {
       <div class="page-sub">月度发票 · 余额追踪 · 对账号管理</div>
     </div>
     <div class="page-actions">
+      <button class="btn btn-sec btn-sm" onclick="document.getElementById('zipF').click()">📦 上传发票 PDF 压缩包</button>
+      <input type="file" id="zipF" accept=".zip" style="display:none" onchange="handleInvoiceZip(this)">
       <button class="btn btn-pri btn-sm" onclick="showUp()">↑ 导入 Statement PDF</button>
     </div>
   </div>
@@ -539,7 +540,7 @@ tr.expand-row td {
 
   <div class="help-tip">
     <span>💡</span>
-    <div>双击任意单元格即可修改。<strong>重传 PDF 时</strong>：本次应付、对账号、付款方式、合同类别、付款日期等手填字段会被保留，金额/日期等会按 PDF 刷新。</div>
+    <div><strong>📦 上传发票压缩包</strong>：自动识别 PDF 内的 VIN / Unit Price / GST / Amount 并填入对应发票行。一张发票多个 VIN 会展开成多行。<br><strong>双击</strong>任意单元格可手动修改。<strong>重传时</strong>：本次应付、对账号、付款方式、合同类别等手填字段会被保留；已识别的 VIN 也不会被覆盖。</div>
   </div>
 
   <div class="table-wrap"><div class="table-scroll">
@@ -548,8 +549,12 @@ tr.expand-row td {
         <th onclick="srt('invoice_date')">发票日期</th>
         <th onclick="srt('invoice_no')">发票号</th>
         <th>PO / 合同号</th>
+        <th>VIN</th>
         <th onclick="srt('due_date')">到期日</th>
-        <th class="num">Invoice Amount</th>
+        <th class="num" style="border-left:2px solid var(--border)">Unit Price</th>
+        <th class="num">GST</th>
+        <th class="num">Amount AUD</th>
+        <th class="num" style="border-left:2px solid var(--border)">Invoice Amount</th>
         <th class="num">已付</th>
         <th class="num">Balance AUD</th>
         <th class="num" style="background:var(--accent-soft);color:var(--accent-2)">本次应付</th>
@@ -557,135 +562,12 @@ tr.expand-row td {
         <th>对账号</th>
         <th>付款方式</th>
         <th>合同类别</th>
-        <th>付款日期</th>
         <th>操作</th>
       </tr></thead>
-      <tbody id="t1b"><tr><td colspan="14"><div class="empty"><div class="empty-icon">📄</div><div class="empty-text">请先导入 Statement PDF</div></div></td></tr></tbody>
+      <tbody id="t1b"><tr><td colspan="17"><div class="empty"><div class="empty-icon">📄</div><div class="empty-text">请先导入 Statement PDF</div></div></td></tr></tbody>
     </table>
   </div></div>
 </div>
-
-<!-- ═══ TAB 2: 发票明细 ═══ -->
-<div class="panel" id="t2">
-  <div class="page-head">
-    <div>
-      <div class="page-title">发票明细</div>
-      <div class="page-sub">VIN 级别 · 采购 + 销售 + 毛利</div>
-    </div>
-    <div class="page-actions">
-      <button class="btn btn-sec btn-sm" onclick="document.getElementById('xlsPurchF').click()">↑ 上传采购录入表</button>
-      <input type="file" id="xlsPurchF" accept=".xlsx,.xls" style="display:none" onchange="handleXlsUpload(this,'purchase')">
-      <button class="btn btn-sec btn-sm" onclick="document.getElementById('xlsSalesF').click()">↑ 上传销售明细表</button>
-      <input type="file" id="xlsSalesF" accept=".xlsx,.xls" style="display:none" onchange="handleXlsUpload(this,'sales')">
-      <button class="btn btn-sec btn-sm" onclick="expT2()">↓ 导出</button>
-    </div>
-  </div>
-
-  <div class="help-tip">
-    <span>💡</span>
-    <div>
-      <strong>使用顺序</strong>：先上传"采购录入表" → 再上传"销售明细表"。系统按 <strong>VIN</strong> 自动匹配；按 VIN 优先、PO 兜底匹配 STMT 发票。<br>
-      <strong>差额列</strong> = STMT 发票金额 - 采购合计：正数（红）= STMT 多收钱；负数（黄）= 采购表多记钱。<br>
-      <strong>双击</strong> 可改：采购价、销售价（自动重算 GST/合计/毛利/毛利率）、销售单号、销售状态。<strong>重传 Excel 时</strong>：原本已有的字段会被严格保护，只填充原本为空的字段。
-    </div>
-  </div>
-
-  <div class="toolbar">
-    <input class="search-inp" placeholder="搜索 VIN / 合同号 / 销售单号 / STMT 发票号..." oninput="ft2q(this.value)">
-    <select class="filter-sel" onchange="ft2st(this.value)">
-      <option value="">全部销售状态</option>
-      <option value="已全款">已全款</option>
-      <option value="未全款">未全款</option>
-      <option value="未售出">未售出</option>
-      <option value="特殊">特殊</option>
-      <option value="租赁">租赁</option>
-    </select>
-    <select class="filter-sel" onchange="ft2pr(this.value)">
-      <option value="">毛利率 全部</option>
-      <option value="neg">负数</option>
-      <option value="lt10">&lt;10%</option>
-      <option value="lt20">&lt;20%</option>
-      <option value="gt20">≥20%</option>
-    </select>
-    <div style="margin-left:auto;font-size:12px;color:var(--text-3);font-family:var(--mono)" id="t2count"></div>
-  </div>
-
-  <div class="table-wrap"><div class="table-scroll" style="max-height:70vh">
-    <table id="t2t">
-      <thead><tr>
-        <th>合同号</th>
-        <th>VIN</th>
-        <th>型号/规格</th>
-        <th class="num" style="border-left:2px solid var(--border)">采购价(不含税)</th>
-        <th class="num">GST</th>
-        <th class="num">采购合计</th>
-        <th style="border-left:2px solid var(--border)">STMT 发票号</th>
-        <th class="num">STMT 发票金额</th>
-        <th class="num">差额</th>
-        <th style="border-left:2px solid var(--border)">销售单号</th>
-        <th class="num">销售价(不含税)</th>
-        <th class="num">销售合计(含税)</th>
-        <th class="num">毛利</th>
-        <th class="num">毛利率</th>
-        <th>销售状态</th>
-      </tr></thead>
-      <tbody id="t2b"><tr><td colspan="15"><div class="empty"><div class="empty-icon">📦</div><div class="empty-text">请先上传"采购录入表 Excel"</div></div></td></tr></tbody>
-    </table>
-  </div></div>
-</div>
-
-<!-- ═══ TAB 3: 商务汇总 ═══ -->
-<div class="panel" id="t3">
-  <div class="page-head">
-    <div>
-      <div class="page-title">商务汇总</div>
-      <div class="page-sub">合同号聚合 · Statement 发票关联 · 对账号追踪</div>
-    </div>
-    <div class="page-actions">
-      <button class="btn btn-sec btn-sm" onclick="document.getElementById('xlsBizF').click()">↑ 上传合同商务表</button>
-      <input type="file" id="xlsBizF" accept=".xlsx,.xls" style="display:none" onchange="handleBizUpload(this)">
-    </div>
-  </div>
-
-  <div class="help-tip">
-    <span>💡</span>
-    <div>
-      <strong>📒 商务表内合同</strong>：来自你上传的合同商务表 Excel，合同数与 Excel 一致；发票数和 STATEMENT 总额由系统按合同号检索 Statement 对账自动汇总。<br>
-      <strong>⚠️ 仅 Statement、未在商务表</strong>：Statement 里出现了但你的商务表 Excel 里没有的合同号——可能是 Statement 写错了 PO，或商务表漏录。<br>
-      左侧 <strong>▶ 点击展开</strong> 可查看该合同下所有 Statement 发票 + 对账号 + 设备明细。
-    </div>
-  </div>
-
-  <div style="display:flex;gap:2px;border-bottom:1px solid var(--border);margin-bottom:14px">
-    <button class="t3-subtab on" id="t3SubTabMain" onclick="setT3SubTab('main')" style="padding:9px 16px;border-radius:8px 8px 0 0;font-size:13px;font-weight:600;color:var(--accent);cursor:pointer;border:none;background:none;border-bottom:2px solid var(--accent);margin-bottom:-1px;font-family:var(--sans)">📒 商务表内合同</button>
-    <button class="t3-subtab" id="t3SubTabOnly" onclick="setT3SubTab('onlyStmt')" style="padding:9px 16px;border-radius:8px 8px 0 0;font-size:13px;font-weight:500;color:var(--text-2);cursor:pointer;border:none;background:none;border-bottom:2px solid transparent;margin-bottom:-1px;font-family:var(--sans)">⚠️ 仅 Statement、未在商务表</button>
-  </div>
-
-  <div class="toolbar">
-    <input class="search-inp" placeholder="搜索合同号 / 对账号..." oninput="ft3q(this.value)">
-    <select class="filter-sel" onchange="ft3s(this.value)">
-      <option value="">全部</option>
-      <option value="unpaid">商务表剩余 &gt; 0</option>
-      <option value="paid">商务表已结清</option>
-      <option value="novoice">无关联 Statement 发票</option>
-    </select>
-    <div style="margin-left:auto;font-size:12px;color:var(--text-3);font-family:var(--mono)" id="t3count"></div>
-  </div>
-
-  <div class="table-wrap"><div class="table-scroll" style="max-height:70vh">
-    <table id="t3t">
-      <thead><tr>
-        <th style="width:30px"></th>
-        <th>合同号</th>
-        <th class="num">商务表剩余金额</th>
-        <th class="num">发票数</th>
-        <th class="num">STATEMENT 总额</th>
-      </tr></thead>
-      <tbody id="t3b"><tr><td colspan="5"><div class="empty"><div class="empty-icon">🤝</div><div class="empty-text">需要先有 Statement 发票或合同商务表数据</div></div></td></tr></tbody>
-    </table>
-  </div></div>
-</div>
-
 <!-- ═══ TAB 4: 付款申请 ═══ -->
 <div class="panel" id="t4">
   <div class="page-head">
@@ -1014,8 +896,6 @@ function sw(id, btn) {
   document.querySelectorAll('.tab').forEach(b => b.classList.remove('on'));
   document.getElementById(id).classList.add('on');
   btn.classList.add('on');
-  if (id === 't2') renderT2();
-  if (id === 't3') renderT3();
   if (id === 't4') updateReconList();
 }
 
@@ -1700,6 +1580,273 @@ async function doImport() {
 }
 
 // ════════════════════════════════════════════════════════════
+//  INVOICE ZIP UPLOAD (核心新功能：识别发票 PDF 并填充 VIN/单价/GST/金额)
+// ════════════════════════════════════════════════════════════
+
+// 解析单张发票 PDF 的文本，返回 { invoice_no, invoice_date, po_short, so_no, due_date, lines: [{line_no, vin, unit_price, gst_rate, amount}] }
+function parseInvoicePdf(text) {
+  const result = { invoice_no: null, invoice_date: null, po_short: null, so_no: null, due_date: null, lines: [] };
+
+  // Invoice Number
+  let m = text.match(/Invoice Number\s*\n\s*(\S+)/);
+  if (m) result.invoice_no = m[1].trim();
+
+  // Invoice Date
+  m = text.match(/Invoice Date\s*\n\s*(\d+\s+\w+\s+\d{4})/);
+  if (m) result.invoice_date = m[1].trim();
+
+  // Reference (可能跨行)：抓 Reference 后到 ABN 之间的内容
+  m = text.match(/Reference\s*\n([\s\S]*?)(?=\nABN|\nHC|$)/);
+  if (m) {
+    const refRaw = m[1].replace(/\s+/g, '');   // 合并所有空白
+    // PO 部分: CS/POxxxxx 或 POxxxxx (到下一个 / 前)
+    const poM = refRaw.match(/(CS\/PO[\w]+|PO[-\w]+?)(?=\/SO|$)/i);
+    if (poM) result.po_short = poM[1];
+    const soM = refRaw.match(/(SO\w+)/i);
+    if (soM) result.so_no = soM[1];
+  }
+
+  // Due Date
+  m = text.match(/Due Date:\s*(\d+\s+\w+\s+\d{4})/);
+  if (m) result.due_date = m[1].trim();
+
+  // 找所有 Serial No
+  const serials = [];
+  const serialRe = /Serial No:\s*([A-Z0-9]+)/g;
+  let sm;
+  while ((sm = serialRe.exec(text)) !== null) serials.push(sm[1]);
+
+  // 找所有"qty unit_price gst% amount"明细行
+  const lineRe = /^(\d+(?:\.\d+)?)\s+([\d,]+\.\d{2})\s+(\d+%)\s+([\d,]+\.\d{2})\s*$/gm;
+  const lineMatches = [];
+  let lm;
+  while ((lm = lineRe.exec(text)) !== null) {
+    lineMatches.push({
+      qty: parseFloat(lm[1]),
+      unit_price: parseFloat(lm[2].replace(/,/g, '')),
+      gst_rate: lm[3],
+      amount: parseFloat(lm[4].replace(/,/g, '')),
+    });
+  }
+
+  // 配对（按出现顺序）
+  for (let i = 0; i < lineMatches.length; i++) {
+    result.lines.push({
+      line_no: i + 1,
+      vin: serials[i] || null,
+      unit_price: lineMatches[i].unit_price,
+      gst_rate: lineMatches[i].gst_rate,
+      amount: lineMatches[i].amount,
+    });
+  }
+
+  return result;
+}
+
+async function handleInvoiceZip(input) {
+  const file = input.files[0];
+  if (!file) return;
+
+  if (!S.month) {
+    toast('请先在 Statement 对账页选择月份', 'wn');
+    input.value = '';
+    return;
+  }
+
+  showL('解压 ZIP...');
+  try {
+    const zip = await JSZip.loadAsync(file);
+    // 收集所有 PDF 文件
+    const pdfFiles = [];
+    zip.forEach((path, entry) => {
+      if (!entry.dir && /\.pdf$/i.test(entry.name)) {
+        pdfFiles.push({ name: entry.name, entry });
+      }
+    });
+
+    if (!pdfFiles.length) {
+      hideL();
+      toast('ZIP 中未找到 PDF 文件', 'er');
+      input.value = '';
+      return;
+    }
+
+    showL('识别发票 PDF...', `0 / ${pdfFiles.length}`);
+
+    // 并行解析所有 PDF
+    let done = 0;
+    const results = await Promise.all(pdfFiles.map(async ({ name, entry }) => {
+      try {
+        const arr = await entry.async('arraybuffer');
+        const pdf = await pdfjsLib.getDocument({ data: arr }).promise;
+        let text = '';
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const content = await page.getTextContent();
+          text += content.items.map(it => it.str).join(' ') + '\n';
+        }
+        // pdf.js 默认用空格连接 items，但我们的正则依赖换行；改成更好的连接方式
+        // 实际上 items 已经按位置排了，重写一次：按 y 坐标分行
+        text = '';
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const content = await page.getTextContent();
+          // 按 y 坐标分组（同一行的 item）
+          const lines = {};
+          for (const item of content.items) {
+            const y = Math.round(item.transform[5]);
+            if (!lines[y]) lines[y] = [];
+            lines[y].push(item);
+          }
+          // y 大的在上方（PDF 坐标系）
+          const ys = Object.keys(lines).map(Number).sort((a, b) => b - a);
+          for (const y of ys) {
+            const lineItems = lines[y].sort((a, b) => a.transform[4] - b.transform[4]);
+            text += lineItems.map(it => it.str).join(' ').trim() + '\n';
+          }
+        }
+        const parsed = parseInvoicePdf(text);
+        done++;
+        if (done % 5 === 0) showL('识别发票 PDF...', `${done} / ${pdfFiles.length}`);
+        return { name, parsed, ok: !!parsed.invoice_no };
+      } catch (e) {
+        done++;
+        console.error('Parse PDF failed:', name, e);
+        return { name, parsed: null, ok: false, err: e.message };
+      }
+    }));
+
+    showL('匹配 Statement 发票...');
+
+    // 拉当月所有 Statement 发票（用于匹配）
+    const enc = encodeURIComponent(S.store);
+    const existingStmt = await api('GET', 'statements_invoices', null,
+      `?store=eq.${enc}&statement_month=eq.${encodeURIComponent(S.month)}&select=id,invoice_no,line_no,vin,po_short,unit_price,gst_rate,amount_aud,recon_no,payment_method,contract_type,to_pay_amount&limit=10000`) || [];
+    // 按 invoice_no 分组
+    const stmtByInv = {};
+    for (const r of existingStmt) {
+      if (!stmtByInv[r.invoice_no]) stmtByInv[r.invoice_no] = [];
+      stmtByInv[r.invoice_no].push(r);
+    }
+
+    // 分类
+    const okResults = results.filter(r => r.ok);
+    const failResults = results.filter(r => !r.ok);
+    const matched = okResults.filter(r => stmtByInv[r.parsed.invoice_no]);
+    const unmatched = okResults.filter(r => !stmtByInv[r.parsed.invoice_no]);
+
+    if (!matched.length) {
+      hideL();
+      input.value = '';
+      const detail = `识别成功 ${okResults.length} 张 · 失败 ${failResults.length} 张 · 但都未在当月 Statement 中找到对应发票号`;
+      toast('未匹配到任何 Statement 发票', 'wn', detail, 8000);
+      return;
+    }
+
+    // 弹窗确认
+    hideL();
+    const ok = confirm(
+      `📦 发票识别完成：\n\n` +
+      `· ZIP 总计 ${pdfFiles.length} 个 PDF\n` +
+      `· 识别成功 ${okResults.length} 张 / 失败 ${failResults.length} 张\n` +
+      `· 匹配到 ${S.month} Statement: ${matched.length} 张\n` +
+      `· 未匹配（Statement 里没有这个发票号）: ${unmatched.length} 张\n\n` +
+      `准备将识别到的 PO/VIN/单价/GST/金额 写入 Statement。\n` +
+      `已手填的字段（如对账号、付款方式）会被保留。\n\n` +
+      `是否继续？`
+    );
+    if (!ok) { toast('已取消', 'wn'); input.value = ''; return; }
+
+    showL('写入数据...');
+
+    // 写入：每个匹配的发票
+    //   - 如果 Statement 里这个发票号已有 N 条记录（line_no = 1..N），按 line_no 更新
+    //   - 如果发票识别出 M 行（M > N），多出来的行要 INSERT 新行
+    //   - 如果 M < N，多出来的旧行保留（不删，因为可能用户手填了）
+    let updated = 0, inserted = 0, failed = 0;
+    for (const r of matched) {
+      const invNo = r.parsed.invoice_no;
+      const existRows = stmtByInv[invNo] || [];
+      // 排序：line_no 小到大
+      existRows.sort((a, b) => (a.line_no || 1) - (b.line_no || 1));
+
+      for (let i = 0; i < r.parsed.lines.length; i++) {
+        const line = r.parsed.lines[i];
+        const targetLineNo = i + 1;
+        const exist = existRows[i];
+        if (exist) {
+          // 更新现有行：仅填充原本为空的字段
+          const patch = {};
+          if (!exist.vin && line.vin)               patch.vin = line.vin;
+          if (!exist.po_short && r.parsed.po_short) patch.po_short = r.parsed.po_short;
+          if (!exist.unit_price && line.unit_price != null) patch.unit_price = line.unit_price;
+          if (!exist.gst_rate && line.gst_rate)     patch.gst_rate = line.gst_rate;
+          if (exist.amount_aud == null && line.amount != null) patch.amount_aud = line.amount;
+          // line_no 也补上（如果原本是 null）
+          if (exist.line_no == null) patch.line_no = targetLineNo;
+          if (Object.keys(patch).length > 0) {
+            try {
+              await api('PATCH', 'statements_invoices', patch, `?id=eq.${exist.id}`);
+              updated++;
+            } catch (e) {
+              failed++;
+              console.error('Update line failed:', invNo, targetLineNo, e);
+            }
+          }
+        } else {
+          // 插入新行（同发票号、不同 line_no）—— 复制头部信息但留空已付/Balance（保持发票总额在 line_no=1）
+          const headInv = existRows[0];
+          if (!headInv) continue;
+          const newRow = {
+            store: headInv.store || S.store,
+            statement_month: S.month,
+            invoice_no: invNo,
+            line_no: targetLineNo,
+            vin: line.vin,
+            po_short: r.parsed.po_short,
+            so_no: r.parsed.so_no,
+            unit_price: line.unit_price,
+            gst_rate: line.gst_rate,
+            amount_aud: line.amount,
+            // 这些字段是发票级别的，只在 line_no=1 里有意义；新行留空
+          };
+          try {
+            await api('POST', 'statements_invoices', [newRow]);
+            inserted++;
+          } catch (e) {
+            failed++;
+            console.error('Insert line failed:', invNo, targetLineNo, e);
+          }
+        }
+      }
+    }
+
+    hideL();
+    input.value = '';
+    const summary = `✅ 更新 ${updated} 行 · ➕ 新增 ${inserted} 行 · ` +
+                    (failed ? `❌ 失败 ${failed} 行` : '') +
+                    ` · 未匹配 ${unmatched.length} 张` +
+                    (failResults.length ? ` · 解析失败 ${failResults.length} 张` : '');
+    toast('发票数据已写入', failed ? 'wn' : 'ok', summary, 8000);
+
+    // 如果有未匹配的，控制台输出列表方便排查
+    if (unmatched.length) {
+      console.log('未匹配的发票号:', unmatched.map(u => `${u.name} → ${u.parsed.invoice_no}`));
+    }
+    if (failResults.length) {
+      console.log('解析失败的 PDF:', failResults.map(f => f.name));
+    }
+
+    await loadData();
+  } catch (e) {
+    hideL();
+    toast('压缩包处理失败', 'er', e.message);
+    console.error(e);
+    input.value = '';
+  }
+}
+
+// ════════════════════════════════════════════════════════════
 //  LOAD DATA
 // ════════════════════════════════════════════════════════════
 async function loadData() {
@@ -1723,8 +1870,6 @@ async function loadData() {
     renderMC(months);
     updStats();
     renderT1();
-    renderT2();
-    renderT3();
     updateReconList();
     hideL();
   } catch (e) {
@@ -1779,13 +1924,27 @@ function renderT1() {
     rows = rows.filter(r =>
       (r.invoice_no || '').toLowerCase().includes(lq) ||
       (r.reference  || '').toLowerCase().includes(lq) ||
-      (r.recon_no   || '').toLowerCase().includes(lq)
+      (r.recon_no   || '').toLowerCase().includes(lq) ||
+      (r.po_short   || '').toLowerCase().includes(lq) ||
+      (r.vin        || '').toLowerCase().includes(lq)
     );
   }
   if (st)  rows = rows.filter(r => r.month_category === st);
   if (pay) rows = rows.filter(r => r.payment_method === pay);
-  rows = [...rows].sort((a, b) => {
-    const va = a[S.sort.col] || '', vb = b[S.sort.col] || '';
+
+  // 按发票号分组（同 invoice_no 的所有行合并显示）
+  const groups = {};
+  for (const r of rows) {
+    const key = r.invoice_no || '(空)';
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(r);
+  }
+  // 每个组按 line_no 排序；组本身按"组里第一行的当前排序字段"排序
+  for (const k in groups) {
+    groups[k].sort((a, b) => (a.line_no || 1) - (b.line_no || 1));
+  }
+  const groupList = Object.values(groups).sort((a, b) => {
+    const va = a[0][S.sort.col] || '', vb = b[0][S.sort.col] || '';
     return va < vb ? -S.sort.dir : va > vb ? S.sort.dir : 0;
   });
 
@@ -1797,31 +1956,82 @@ function renderT1() {
     unknown: '—',
   };
 
-  document.getElementById('t1b').innerHTML = rows.length ? rows.map(r => {
-    const due = parseDue(r.due_date), isOv = due && due < now && r.balance_aud > 0;
-    const pm = r.payment_method === '直接支付' ? '<span class="badge b-ok">直接支付</span>'
-            : r.payment_method === '贷款' ? '<span class="badge b-ac">贷款</span>' : '';
-    const ct = r.contract_type ? `<span class="badge b-mu">${esc(r.contract_type)}</span>` : '';
-    // 本次应付：优先用 to_pay_amount，未设置时显示 balance_aud（淡色，提示是默认值）
-    const toPayVal = r.to_pay_amount != null ? Number(r.to_pay_amount) : Number(r.balance_aud || 0);
-    const toPayIsCustom = r.to_pay_amount != null && Math.abs(Number(r.to_pay_amount) - Number(r.balance_aud || 0)) > 0.01;
-    return `<tr class="${r.ignored ? 'row-ignored' : ''} ${r.month_category === 'new' ? 'row-new' : ''}">
-      <td class="ec mono" style="font-size:12px" ondblclick="ecDate('${r.id}','invoice_date',this,'statements_invoices')">${esc(r.invoice_date) || '—'}</td>
-      <td class="ec" style="font-weight:600;color:var(--accent);font-family:var(--mono);font-size:12px" ondblclick="ecText('${r.id}','invoice_no',this,'statements_invoices')">${esc(r.invoice_no)}${isOv ? ' <span class="badge b-er">逾期</span>' : ''}</td>
-      <td class="ec mono" style="font-size:11px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" ondblclick="ecText('${r.id}','reference',this,'statements_invoices')">${esc(r.reference) || '<span style="color:var(--text-3)">双击编辑</span>'}</td>
-      <td class="ec mono" style="font-size:12px;color:${isOv ? 'var(--err)' : 'var(--text-2)'}" ondblclick="ecText('${r.id}','due_date',this,'statements_invoices')">${esc(r.due_date) || '—'}</td>
-      <td class="ec num" ondblclick="ecText('${r.id}','invoice_amount',this,'statements_invoices')">${fmt(r.invoice_amount)}</td>
-      <td class="ec num" style="color:var(--ok)" ondblclick="ecText('${r.id}','payments',this,'statements_invoices')">${r.payments > 0 ? fmt(r.payments) : '—'}</td>
-      <td class="ec num" style="font-weight:700" ondblclick="ecText('${r.id}','balance_aud',this,'statements_invoices')">${fmt(r.balance_aud)}</td>
-      <td class="ec num" style="background:var(--accent-soft);font-weight:700;color:${toPayIsCustom ? 'var(--warn)' : 'var(--accent-2)'}" title="${toPayIsCustom ? '已手动调整（与 Balance AUD 不同）' : '默认 = Balance AUD'}" ondblclick="ecText('${r.id}','to_pay_amount',this,'statements_invoices')">${fmt(toPayVal)}${toPayIsCustom ? ' *' : ''}</td>
-      <td>${cat[r.month_category] || '—'}</td>
-      <td class="ec" style="color:var(--warn);font-family:var(--mono);font-size:12px" ondblclick="ecText('${r.id}','recon_no',this,'statements_invoices')">${esc(r.recon_no) || '<span style="color:var(--text-3)">双击设置</span>'}</td>
-      <td class="ec" ondblclick="ecSel('${r.id}','payment_method',this,'statements_invoices',['直接支付','贷款'])">${pm || '<span style="color:var(--text-3);font-size:12px">双击设置</span>'}</td>
-      <td class="ec" ondblclick="ecSel('${r.id}','contract_type',this,'statements_invoices',['确认合同','自有'])">${ct || '<span style="color:var(--text-3);font-size:12px">双击设置</span>'}</td>
-      <td class="ec" style="font-family:var(--mono);font-size:12px" ondblclick="ecDate('${r.id}','payment_date',this,'statements_invoices')">${esc(r.payment_date) || '<span style="color:var(--text-3)">双击设置</span>'}</td>
-      <td><button class="btn btn-sec btn-sm" style="color:${r.ignored ? 'var(--ok)' : 'var(--err)'}" onclick="togIgn('${r.id}',${r.ignored})">${r.ignored ? '↩ 恢复' : '忽略'}</button></td>
-    </tr>`;
-  }).join('') : '<tr><td colspan="14"><div class="empty"><div class="empty-icon">🔍</div><div class="empty-text">无匹配数据</div></div></td></tr>';
+  if (!groupList.length) {
+    document.getElementById('t1b').innerHTML = '<tr><td colspan="17"><div class="empty"><div class="empty-icon">🔍</div><div class="empty-text">无匹配数据</div></div></td></tr>';
+    return;
+  }
+
+  const html = [];
+  for (const group of groupList) {
+    const span = group.length;
+    const head = group[0];   // 用第一行做"头"信息
+    const due = parseDue(head.due_date), isOv = due && due < now && head.balance_aud > 0;
+    const pm = head.payment_method === '直接支付' ? '<span class="badge b-ok">直接支付</span>'
+            : head.payment_method === '贷款' ? '<span class="badge b-ac">贷款</span>' : '';
+    const ct = head.contract_type ? `<span class="badge b-mu">${esc(head.contract_type)}</span>` : '';
+    const toPayVal = head.to_pay_amount != null ? Number(head.to_pay_amount) : Number(head.balance_aud || 0);
+    const toPayIsCustom = head.to_pay_amount != null && Math.abs(Number(head.to_pay_amount) - Number(head.balance_aud || 0)) > 0.01;
+    const rowCls = `${head.ignored ? 'row-ignored' : ''} ${head.month_category === 'new' ? 'row-new' : ''}`;
+
+    // 每个 VIN 行
+    for (let idx = 0; idx < group.length; idx++) {
+      const r = group[idx];
+      const isFirst = idx === 0;
+      const isLast = idx === group.length - 1;
+      const rowSep = !isLast ? 'border-bottom:1px dashed var(--border)' : '';
+
+      // 头部 8 列（发票日期、发票号、PO、VIN、到期日、Unit Price、GST、Amount）
+      // 注意：PO/VIN/Unit Price/GST/Amount 是每行不同的，发票级别（日期、发票号、到期日）用 rowspan
+      const dateCell = isFirst ? `
+        <td class="ec mono" style="font-size:12px;vertical-align:top" rowspan="${span}" ondblclick="ecDate('${r.id}','invoice_date',this,'statements_invoices')">${esc(r.invoice_date) || '—'}</td>
+        <td class="ec" style="font-weight:600;color:var(--accent);font-family:var(--mono);font-size:12px;vertical-align:top" rowspan="${span}" ondblclick="ecText('${r.id}','invoice_no',this,'statements_invoices')">${esc(r.invoice_no)}${isOv ? ' <span class="badge b-er">逾期</span>' : ''}${span > 1 ? ` <span class="badge b-mu">${span} 行</span>` : ''}</td>` : '';
+
+      // PO + VIN 每行可能不同（识别发票后填充）
+      const poCell = `<td class="ec mono" style="font-size:11px;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;${rowSep}" ondblclick="ecText('${r.id}','po_short',this,'statements_invoices')">${esc(r.po_short || r.reference) || '<span style="color:var(--text-3)">双击</span>'}</td>`;
+      const vinCell = `<td class="ec mono" style="font-size:11px;font-weight:600;${rowSep}" ondblclick="ecText('${r.id}','vin',this,'statements_invoices')">${esc(r.vin) || '<span style="color:var(--text-3)">双击</span>'}</td>`;
+
+      const dueCell = isFirst ? `
+        <td class="ec mono" style="font-size:12px;color:${isOv ? 'var(--err)' : 'var(--text-2)'};vertical-align:top" rowspan="${span}" ondblclick="ecText('${r.id}','due_date',this,'statements_invoices')">${esc(r.due_date) || '—'}</td>` : '';
+
+      // Unit Price / GST / Amount AUD —— 每行
+      const unitCell   = `<td class="ec num" style="border-left:2px solid var(--border);${rowSep}" ondblclick="ecText('${r.id}','unit_price',this,'statements_invoices')">${fmt(r.unit_price)}</td>`;
+      const gstCell    = `<td class="ec num" style="${rowSep}" ondblclick="ecText('${r.id}','gst_rate',this,'statements_invoices')">${esc(r.gst_rate) || '—'}</td>`;
+      const amountCell = `<td class="ec num" style="font-weight:600;${rowSep}" ondblclick="ecText('${r.id}','amount_aud',this,'statements_invoices')">${fmt(r.amount_aud)}</td>`;
+
+      // 发票级别字段（Invoice Amount, 已付, Balance, 本次应付, 状态, 对账号, 付款方式, 合同类别, 操作）
+      const tailCells = isFirst ? `
+        <td class="ec num" style="border-left:2px solid var(--border);vertical-align:top" rowspan="${span}" ondblclick="ecText('${r.id}','invoice_amount',this,'statements_invoices')">${fmt(r.invoice_amount)}</td>
+        <td class="ec num" style="color:var(--ok);vertical-align:top" rowspan="${span}" ondblclick="ecText('${r.id}','payments',this,'statements_invoices')">${r.payments > 0 ? fmt(r.payments) : '—'}</td>
+        <td class="ec num" style="font-weight:700;vertical-align:top" rowspan="${span}" ondblclick="ecText('${r.id}','balance_aud',this,'statements_invoices')">${fmt(r.balance_aud)}</td>
+        <td class="ec num" style="background:var(--accent-soft);font-weight:700;color:${toPayIsCustom ? 'var(--warn)' : 'var(--accent-2)'};vertical-align:top" rowspan="${span}" title="${toPayIsCustom ? '已手动调整' : '默认 = Balance AUD'}" ondblclick="ecText('${r.id}','to_pay_amount',this,'statements_invoices')">${fmt(toPayVal)}${toPayIsCustom ? ' *' : ''}</td>
+        <td style="vertical-align:top" rowspan="${span}">${cat[r.month_category] || '—'}</td>
+        <td class="ec" style="color:var(--warn);font-family:var(--mono);font-size:12px;vertical-align:top" rowspan="${span}" ondblclick="ecText('${r.id}','recon_no',this,'statements_invoices')">${esc(r.recon_no) || '<span style="color:var(--text-3)">双击设置</span>'}</td>
+        <td class="ec" style="vertical-align:top" rowspan="${span}" ondblclick="ecSel('${r.id}','payment_method',this,'statements_invoices',['直接支付','贷款'])">${pm || '<span style="color:var(--text-3);font-size:12px">双击设置</span>'}</td>
+        <td class="ec" style="vertical-align:top" rowspan="${span}" ondblclick="ecSel('${r.id}','contract_type',this,'statements_invoices',['确认合同','自有'])">${ct || '<span style="color:var(--text-3);font-size:12px">双击设置</span>'}</td>
+        <td style="vertical-align:top" rowspan="${span}"><button class="btn btn-sec btn-sm" style="color:${r.ignored ? 'var(--ok)' : 'var(--err)'}" onclick="togIgnGroup('${r.invoice_no}',${r.ignored})">${r.ignored ? '↩ 恢复' : '忽略'}</button></td>` : '';
+
+      html.push(`<tr class="${rowCls}">${dateCell}${poCell}${vinCell}${dueCell}${unitCell}${gstCell}${amountCell}${tailCells}</tr>`);
+    }
+  }
+  document.getElementById('t1b').innerHTML = html.join('');
+}
+
+// 忽略整个发票（所有同 invoice_no 的行）
+async function togIgnGroup(invoiceNo, cur) {
+  const ign = !cur;
+  try {
+    await api('PATCH', 'statements_invoices', { ignored: ign },
+      `?store=eq.${encodeURIComponent(S.store)}&statement_month=eq.${encodeURIComponent(S.month)}&invoice_no=eq.${encodeURIComponent(invoiceNo)}`);
+    for (const r of S.stmtInvoices) {
+      if (r.invoice_no === invoiceNo && r.statement_month === S.month && r.store === S.store) {
+        r.ignored = ign;
+      }
+    }
+    renderT1();
+    updStats();
+  } catch (e) {
+    toast('操作失败', 'er', e.message);
+  }
 }
 
 function srt(col) {
@@ -1841,9 +2051,7 @@ function getRow(table, id) {
 }
 
 function reRender(table) {
-  if (table === 'statements_invoices') { renderT1(); updStats(); renderT3(); }
-  if (table === 'vin_records')         { renderT2(); renderT3(); }
-  if (table === 'biz_contracts')       renderT3();
+  if (table === 'statements_invoices') { renderT1(); updStats(); }
 }
 
 function ecText(id, field, td, table) {
@@ -1984,364 +2192,7 @@ async function togIgn(id, cur) {
 }
 
 // ════════════════════════════════════════════════════════════
-//  RENDER T2: VIN RECORDS
-// ════════════════════════════════════════════════════════════
-function ft2q(v)  { S.f2.q = v; renderT2(); }
-function ft2st(v) { S.f2.st = v; renderT2(); }
-function ft2pr(v) { S.f2.pr = v; renderT2(); }
-
-function renderT2() {
-  let rows = S.vinRecords;
-  const { q, st, pr } = S.f2;
-
-  // 构建关联索引：
-  //   stmtByPO[normPO]  = [{invoice_no, invoice_amount}, ...]
-  //   stmtByVin[VIN]    = [{invoice_no, invoice_amount}, ...]
-  // 关联优先级：VIN 直接命中 > PO 兜底
-  const stmtByPO = {};
-  const stmtByVin = {};
-  for (const inv of S.stmtInvoices) {
-    if (!inv.reference) continue;
-    const ref = inv.reference;
-    const item = { invoice_no: inv.invoice_no, invoice_amount: Number(inv.invoice_amount || 0) };
-    const npo = normPO(ref);
-    if (npo) {
-      if (!stmtByPO[npo]) stmtByPO[npo] = [];
-      stmtByPO[npo].push(item);
-    }
-    // 如果 reference 看起来像 VIN（无 PO 字样、纯字母数字）
-    if (!/PO|CS/i.test(ref) && /^[A-Z0-9]{6,}$/i.test(ref.replace(/\s/g, ''))) {
-      const v = ref.replace(/\s/g, '').toUpperCase();
-      if (!stmtByVin[v]) stmtByVin[v] = [];
-      stmtByVin[v].push(item);
-    }
-  }
-
-  // 给每行附加 _stmtInvoices（优先 VIN，没有用 PO 兜底）
-  rows = rows.map(r => {
-    let invs = [];
-    if (r.vin && stmtByVin[r.vin.toUpperCase()]) invs = stmtByVin[r.vin.toUpperCase()];
-    else if (r.contract_no) {
-      const npo = normPO(r.contract_no);
-      if (stmtByPO[npo]) invs = stmtByPO[npo];
-    }
-    return { ...r, _stmtInvoices: invs };
-  });
-
-  if (q) {
-    const lq = q.toLowerCase();
-    rows = rows.filter(r =>
-      (r.vin             || '').toLowerCase().includes(lq) ||
-      (r.contract_no     || '').toLowerCase().includes(lq) ||
-      (r.sale_invoice_no || '').toLowerCase().includes(lq) ||
-      (r._stmtInvoices || []).some(i => i.invoice_no.toLowerCase().includes(lq))
-    );
-  }
-  if (st) rows = rows.filter(r => (r.sale_status || '') === st);
-  if (pr) {
-    rows = rows.filter(r => {
-      const rt = r.gross_profit_rate;
-      if (rt == null) return false;
-      if (pr === 'neg')   return rt < 0;
-      if (pr === 'lt10')  return rt >= 0 && rt < 10;
-      if (pr === 'lt20')  return rt >= 0 && rt < 20;
-      if (pr === 'gt20')  return rt >= 20;
-      return true;
-    });
-  }
-
-  document.getElementById('t2count').textContent = rows.length ? `${rows.length} 条 VIN 记录` : '';
-
-  const MAX = 800;
-  const display = rows.slice(0, MAX);
-  const overflowNote = rows.length > MAX
-    ? `<tr><td colspan="15" style="padding:10px 14px;background:var(--warn-soft);color:#92400e;font-size:12px;text-align:center">⚠ 共 ${rows.length} 条，当前显示前 ${MAX} 条，请使用搜索筛选</td></tr>`
-    : '';
-
-  const ssBadge = (s) => {
-    if (!s) return '<span style="color:var(--text-3);font-size:12px">—</span>';
-    if (s === '已全款') return '<span class="badge b-ok">已全款</span>';
-    if (s === '未全款') return '<span class="badge b-wn">未全款</span>';
-    if (s === '未售出') return '<span class="badge b-mu">未售出</span>';
-    if (s === '特殊')   return '<span class="badge b-pu">特殊</span>';
-    if (s === '租赁')   return '<span class="badge b-ac">租赁</span>';
-    return `<span class="badge b-mu">${esc(s)}</span>`;
-  };
-
-  // 每行 VIN，按其匹配的 STMT 发票数展开（rowspan 合并前 6 列 + 后 6 列）
-  const html = [];
-  for (const r of display) {
-    const invs = r._stmtInvoices && r._stmtInvoices.length ? r._stmtInvoices : [null];
-    const span = invs.length;
-
-    for (let idx = 0; idx < invs.length; idx++) {
-      const inv = invs[idx];
-      const isFirst = idx === 0;
-      const isLast = idx === invs.length - 1;
-      const rowSep = !isLast ? 'border-bottom:1px dashed var(--border)' : '';
-
-      const purchaseTotal = Number(r.purchase_total || 0);
-      const stmtAmt = inv ? Number(inv.invoice_amount || 0) : null;
-      const diff = inv && purchaseTotal > 0 ? r2(stmtAmt - purchaseTotal) : null;
-      const diffColor = diff == null ? 'var(--text-3)' :
-                        Math.abs(diff) < 0.01 ? 'var(--text-3)' :
-                        diff > 0 ? 'var(--err)' : 'var(--warn)';
-
-      // 前 6 列（合同/VIN/规格/采购）只在第一行出现，rowspan=span
-      const head = isFirst ? `
-        <td class="mono" style="font-size:11px;color:var(--text-2);vertical-align:top" rowspan="${span}">${esc(r.contract_no) || '—'}</td>
-        <td class="mono" style="font-weight:600;font-size:12px;vertical-align:top" rowspan="${span}">${esc(r.vin)}</td>
-        <td style="font-size:12px;color:var(--text-2);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:top" rowspan="${span}">${esc(r.model_spec) || '—'}</td>
-        <td class="num" style="border-left:2px solid var(--border);vertical-align:top" rowspan="${span}">${fmt(r.purchase_price_ex)}</td>
-        <td class="num" style="color:var(--text-3);font-size:11px;vertical-align:top" rowspan="${span}">${fmt(r.purchase_gst)}</td>
-        <td class="num" style="font-weight:600;vertical-align:top" rowspan="${span}">${fmt(r.purchase_total)}</td>` : '';
-
-      // STMT 3 列：每个 VIN 的每张发票一行
-      const stmtCells = `
-        <td class="mono" style="font-size:11px;color:var(--accent);border-left:2px solid var(--border);${rowSep}">${inv ? esc(inv.invoice_no) : '<span style="color:var(--text-3)">—</span>'}</td>
-        <td class="num" style="${rowSep}">${inv ? fmt(stmtAmt) : '—'}</td>
-        <td class="num" style="color:${diffColor};font-weight:600;${rowSep}">${diff == null ? '—' : (diff > 0 ? '+' : '') + fmt(diff)}</td>`;
-
-      // 销售 6 列：销售单号/销售价/合计/毛利/毛利率/状态（只在第一行）
-      const sale = isFirst ? `
-        <td class="ec mono" style="font-size:11px;color:var(--warn);border-left:2px solid var(--border);vertical-align:top" rowspan="${span}" ondblclick="ecText('${r.id}','sale_invoice_no',this,'vin_records')">${esc(r.sale_invoice_no) || '<span style="color:var(--text-3)">双击设置</span>'}</td>
-        <td class="ec num" style="vertical-align:top" rowspan="${span}" ondblclick="ecText('${r.id}','sale_price_ex',this,'vin_records')">${fmt(r.sale_price_ex)}</td>
-        <td class="num" style="vertical-align:top" rowspan="${span}">${fmt(r.sale_total_inc_gst)}</td>
-        <td class="num" style="color:${r.gross_profit > 0 ? 'var(--ok)' : r.gross_profit < 0 ? 'var(--err)' : 'var(--text-3)'};font-weight:600;vertical-align:top" rowspan="${span}">${r.gross_profit != null ? fmt(r.gross_profit) : '—'}</td>
-        <td class="num" style="color:${r.gross_profit_rate > 20 ? 'var(--ok)' : r.gross_profit_rate > 0 ? 'var(--warn)' : r.gross_profit_rate < 0 ? 'var(--err)' : 'var(--text-3)'};vertical-align:top" rowspan="${span}">${r.gross_profit_rate != null ? r.gross_profit_rate + '%' : '—'}</td>
-        <td class="ec" style="vertical-align:top" rowspan="${span}" ondblclick="ecSel('${r.id}','sale_status',this,'vin_records',['已全款','未全款','未售出','特殊','租赁'])">${ssBadge(r.sale_status)}</td>` : '';
-
-      html.push(`<tr>${head}${stmtCells}${sale}</tr>`);
-    }
-  }
-
-  document.getElementById('t2b').innerHTML = display.length
-    ? overflowNote + html.join('')
-    : '<tr><td colspan="15"><div class="empty"><div class="empty-icon">📦</div><div class="empty-text">' + (S.vinRecords.length ? '无匹配数据' : '请先上传"采购录入表 Excel"') + '</div></div></td></tr>';
-}
-
-// ════════════════════════════════════════════════════════════
-//  RENDER T3: 商务汇总（核心重构：按合同号聚合）
-// ════════════════════════════════════════════════════════════
-function ft3q(v) { S.f3.q = v; renderT3(); }
-function ft3s(v) { S.f3.st = v; renderT3(); }
-
-// 构造合同号 → 聚合数据 的索引
-function buildContractIndex() {
-  const mainIdx = {};      // 商务表里有的合同
-  const onlyStmtIdx = {};  // 仅在 Statement 里出现的合同
-
-  // 1) 主索引：从 biz_contracts 初始化
-  for (const c of S.bizContracts) {
-    mainIdx[c.contract_no] = {
-      contract_no: c.contract_no,
-      bizContract: c,
-      invoices: [],
-      vinRecords: [],
-      reconNos: new Set(),
-    };
-  }
-
-  // 2) 遍历 Statement 发票：能挂到 biz 就挂主；不能挂就挂 onlyStmt
-  for (const inv of S.stmtInvoices) {
-    if (!inv.reference) continue;
-    const po = normPO(inv.reference);
-    let key = null;
-    if (mainIdx[inv.reference]) key = inv.reference;
-    else {
-      for (const ck of Object.keys(mainIdx)) {
-        if (normPO(ck) === po) { key = ck; break; }
-      }
-    }
-    if (key) {
-      // 挂到主表
-      mainIdx[key].invoices.push(inv);
-      if (inv.recon_no) mainIdx[key].reconNos.add(inv.recon_no);
-    } else {
-      // 挂到 onlyStmt（按 reference 归一化分组）
-      const groupKey = inv.reference;
-      if (!onlyStmtIdx[groupKey]) {
-        onlyStmtIdx[groupKey] = {
-          contract_no: groupKey, bizContract: null,
-          invoices: [], vinRecords: [], reconNos: new Set(),
-        };
-      }
-      onlyStmtIdx[groupKey].invoices.push(inv);
-      if (inv.recon_no) onlyStmtIdx[groupKey].reconNos.add(inv.recon_no);
-    }
-  }
-
-  // 3) VIN 记录按合同号挂到主索引（只挂能匹配的；不创建新条目）
-  for (const v of S.vinRecords) {
-    if (!v.contract_no) continue;
-    const po = normPO(v.contract_no);
-    let key = null;
-    if (mainIdx[v.contract_no]) key = v.contract_no;
-    else {
-      for (const ck of Object.keys(mainIdx)) {
-        if (normPO(ck) === po) { key = ck; break; }
-      }
-    }
-    if (key) mainIdx[key].vinRecords.push(v);
-    // 也尝试挂到 onlyStmt
-    if (!key) {
-      for (const ck of Object.keys(onlyStmtIdx)) {
-        if (normPO(ck) === po) { onlyStmtIdx[ck].vinRecords.push(v); break; }
-      }
-    }
-  }
-
-  return { main: mainIdx, onlyStmt: onlyStmtIdx };
-}
-
-function renderT3() {
-  const { main, onlyStmt } = buildContractIndex();
-  const subTab = S.t3SubTab || 'main';   // 'main' 或 'onlyStmt'
-
-  // 计算金额（两个索引都算）
-  for (const e of Object.values(main)) {
-    e._invCount = e.invoices.length;
-    e._stmtTotal = e.invoices.reduce((s, i) => s + Number(i.invoice_amount || 0), 0);
-    e._bizRemaining = e.bizContract?.remaining_amount != null
-      ? Number(e.bizContract.remaining_amount)
-      : (e.bizContract?.contract_total != null ? Number(e.bizContract.contract_total) : null);
-  }
-  for (const e of Object.values(onlyStmt)) {
-    e._invCount = e.invoices.length;
-    e._stmtTotal = e.invoices.reduce((s, i) => s + Number(i.invoice_amount || 0), 0);
-    e._bizRemaining = null;
-  }
-
-  const mainCount = Object.keys(main).length;
-  const onlyCount = Object.keys(onlyStmt).length;
-
-  // 更新子 tab 计数
-  const mainTabEl = document.getElementById('t3SubTabMain');
-  const onlyTabEl = document.getElementById('t3SubTabOnly');
-  if (mainTabEl) mainTabEl.textContent = `📒 商务表内合同 (${mainCount})`;
-  if (onlyTabEl) onlyTabEl.textContent = `⚠️ 仅 Statement、未在商务表 (${onlyCount})`;
-
-  let entries = Object.values(subTab === 'main' ? main : onlyStmt);
-
-  const { q, st } = S.f3;
-  if (q) {
-    const lq = q.toLowerCase();
-    entries = entries.filter(e =>
-      (e.contract_no || '').toLowerCase().includes(lq) ||
-      [...e.reconNos].some(r => r.toLowerCase().includes(lq))
-    );
-  }
-
-  if (subTab === 'main') {
-    if (st === 'paid')   entries = entries.filter(e => e._bizRemaining != null && e._bizRemaining <= 0.01);
-    if (st === 'unpaid') entries = entries.filter(e => e._bizRemaining != null && e._bizRemaining > 0.01);
-    if (st === 'novoice') entries = entries.filter(e => e._invCount === 0);
-  }
-
-  // 排序：STATEMENT 总额降序
-  entries.sort((a, b) => b._stmtTotal - a._stmtTotal);
-
-  document.getElementById('t3count').textContent = entries.length ? `${entries.length} 个合同号` : '';
-
-  const rowsHtml = [];
-  for (const e of entries) {
-    const isExpanded = S.expandedContracts.has(e.contract_no);
-
-    rowsHtml.push(`<tr class="contract-row ${isExpanded ? 'expanded' : ''}" onclick="toggleContract('${esc(e.contract_no)}')">
-      <td style="text-align:center"><span class="expand-icon">▶</span></td>
-      <td class="mono" style="font-size:12px;font-weight:600;color:var(--accent)">${esc(e.contract_no)}</td>
-      <td class="num" style="color:${e._bizRemaining != null && e._bizRemaining > 0 ? 'var(--warn)' : 'var(--text-3)'}">${e._bizRemaining != null ? fmt(e._bizRemaining) : '—'}</td>
-      <td class="num">${e._invCount || '—'}</td>
-      <td class="num" style="font-weight:600">${e._stmtTotal ? fmt(e._stmtTotal) : '—'}</td>
-    </tr>`);
-
-    if (isExpanded) {
-      rowsHtml.push(renderContractExpand(e));
-    }
-  }
-
-  const emptyMsg = subTab === 'main'
-    ? (mainCount === 0 ? '请先上传"合同商务表 Excel"' : '无匹配数据')
-    : (onlyCount === 0 ? '所有 Statement 合同号都已在商务表中（✓ 干净）' : '无匹配数据');
-
-  document.getElementById('t3b').innerHTML = rowsHtml.length
-    ? rowsHtml.join('')
-    : `<tr><td colspan="5"><div class="empty"><div class="empty-icon">🤝</div><div class="empty-text">${emptyMsg}</div></div></td></tr>`;
-}
-
-function setT3SubTab(name) {
-  S.t3SubTab = name;
-  S.expandedContracts.clear();
-  document.querySelectorAll('.t3-subtab').forEach(b => b.classList.remove('on'));
-  document.getElementById(name === 'main' ? 't3SubTabMain' : 't3SubTabOnly').classList.add('on');
-  renderT3();
-}
-
-function toggleContract(cn) {
-  if (S.expandedContracts.has(cn)) S.expandedContracts.delete(cn);
-  else S.expandedContracts.add(cn);
-  renderT3();
-}
-
-function renderContractExpand(e) {
-  const invHtml = e.invoices.length
-    ? `<table class="report-table">
-        <thead><tr>
-          <th>发票号</th><th>发票日期</th><th>到期日</th>
-          <th class="num">Invoice</th><th class="num">已付</th><th class="num">余额</th>
-          <th>对账号</th>
-        </tr></thead>
-        <tbody>${e.invoices.map(i => `<tr>
-          <td class="mono" style="font-size:12px;color:var(--accent)">${esc(i.invoice_no)}</td>
-          <td class="mono" style="font-size:12px">${esc(i.invoice_date) || '—'}</td>
-          <td class="mono" style="font-size:12px">${esc(i.due_date) || '—'}</td>
-          <td class="num">${fmt(i.invoice_amount)}</td>
-          <td class="num" style="color:var(--ok)">${i.payments > 0 ? fmt(i.payments) : '—'}</td>
-          <td class="num" style="font-weight:600">${fmt(i.balance_aud)}</td>
-          <td class="mono" style="font-size:12px;color:var(--warn);cursor:${i.recon_no ? 'pointer' : 'default'}" ${i.recon_no ? `onclick="event.stopPropagation();gotoReport('${esc(i.recon_no)}')"` : ''}>${esc(i.recon_no) || '—'}</td>
-        </tr>`).join('')}</tbody>
-      </table>`
-    : '<div style="color:var(--text-3);font-size:12px">无 Statement 发票</div>';
-
-  const ssBadge = (s) => {
-    if (s === '已全款') return '<span class="badge b-ok">已全款</span>';
-    if (s === '未全款') return '<span class="badge b-wn">未全款</span>';
-    if (s === '未售出') return '<span class="badge b-mu">未售出</span>';
-    if (s === '特殊')   return '<span class="badge b-pu">特殊</span>';
-    return s ? `<span class="badge b-mu">${esc(s)}</span>` : '—';
-  };
-  const vinHtml = e.vinRecords.length
-    ? `<table class="report-table" style="margin-top:14px">
-        <thead><tr>
-          <th>VIN</th><th>型号</th>
-          <th class="num">采购合计</th><th>销售单号</th>
-          <th class="num">销售合计</th><th class="num">毛利</th><th class="num">毛利率</th><th>销售状态</th>
-        </tr></thead>
-        <tbody>${e.vinRecords.map(v => `<tr>
-          <td class="mono" style="font-size:12px;font-weight:600">${esc(v.vin)}</td>
-          <td style="font-size:12px;color:var(--text-2);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(v.model_spec) || '—'}</td>
-          <td class="num">${fmt(v.purchase_total)}</td>
-          <td class="mono" style="font-size:11px;color:var(--warn)">${esc(v.sale_invoice_no) || '—'}</td>
-          <td class="num">${fmt(v.sale_total_inc_gst)}</td>
-          <td class="num" style="color:${v.gross_profit > 0 ? 'var(--ok)' : v.gross_profit < 0 ? 'var(--err)' : 'var(--text-3)'}">${v.gross_profit != null ? fmt(v.gross_profit) : '—'}</td>
-          <td class="num">${v.gross_profit_rate != null ? v.gross_profit_rate + '%' : '—'}</td>
-          <td>${ssBadge(v.sale_status)}</td>
-        </tr>`).join('')}</tbody>
-      </table>`
-    : '<div style="color:var(--text-3);font-size:12px;margin-top:10px">无设备明细</div>';
-
-  return `<tr class="expand-row"><td colspan="5">
-    <div class="expand-content">
-      <div class="expand-title">📄 STATEMENT 发票 (${e.invoices.length})</div>
-      ${invHtml}
-      <div class="expand-title" style="margin-top:16px">🚜 设备明细 (${e.vinRecords.length})</div>
-      ${vinHtml}
-    </div>
-  </td></tr>`;
-}
-
-// ════════════════════════════════════════════════════════════
-//  T4: 付款申请页
+//  T4: 付款申请页（简化版）
 // ════════════════════════════════════════════════════════════
 function updateReconList() {
   const allRecons = new Set();
@@ -2349,12 +2200,11 @@ function updateReconList() {
     if (inv.recon_no) allRecons.add(inv.recon_no);
   }
   const dl = document.getElementById('reconList');
-  dl.innerHTML = [...allRecons].sort().map(r => `<option value="${esc(r)}">`).join('');
+  if (dl) dl.innerHTML = [...allRecons].sort().map(r => `<option value="${esc(r)}">`).join('');
 }
 
 function gotoReport(reconNo) {
   if (!reconNo) return;
-  // 如果有多个对账号，取第一个
   const first = reconNo.split(',')[0].trim();
   if (!first) return;
   document.getElementById('reconQuery').value = first;
@@ -2366,9 +2216,9 @@ function genReport() {
   const reconNo = document.getElementById('reconQuery').value.trim();
   if (!reconNo) { toast('请输入对账号', 'wn'); return; }
 
-  // 找出所有匹配的发票
-  const invoices = S.stmtInvoices.filter(i => i.recon_no === reconNo);
-  if (!invoices.length) {
+  // 找出所有匹配的发票（对账号匹配）—— 因为现在一张发票可能多行，要去重到发票级
+  const matched = S.stmtInvoices.filter(r => r.recon_no === reconNo && !r.ignored);
+  if (!matched.length) {
     document.getElementById('reportArea').innerHTML = `
       <div class="empty" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);margin-top:18px">
         <div class="empty-icon">❌</div>
@@ -2380,124 +2230,42 @@ function genReport() {
     return;
   }
 
-  // 涉及的合同号
-  const contractNos = new Set();
-  for (const inv of invoices) {
-    if (inv.reference) contractNos.add(inv.reference);
+  // 按 invoice_no 分组（去重到发票级）
+  const byInv = {};
+  for (const r of matched) {
+    if (!byInv[r.invoice_no]) byInv[r.invoice_no] = [];
+    byInv[r.invoice_no].push(r);
+  }
+  // 每个发票按 line_no 排序
+  for (const k in byInv) {
+    byInv[k].sort((a, b) => (a.line_no || 1) - (b.line_no || 1));
   }
 
-  // 关联的 VIN 记录（按合同号归一化匹配；同时再按 VIN 直接关联）
-  const vinRecords = [];
-  const vinSeen0 = new Set();
-  // 1) 通过 PO 兜底
-  for (const cn of contractNos) {
-    const npo = normPO(cn);
-    for (const v of S.vinRecords) {
-      if (!v.contract_no) continue;
-      if (normPO(v.contract_no) === npo && !vinSeen0.has(v.vin)) {
-        vinRecords.push(v);
-        vinSeen0.add(v.vin);
-      }
-    }
-  }
-  // 2) 优先：reference 像 VIN 时直接命中
-  const vinHints = new Set();
-  for (const inv of invoices) {
-    if (!inv.reference) continue;
-    const ref = inv.reference.replace(/\s/g, '');
-    if (!/PO|CS/i.test(ref) && /^[A-Z0-9]{6,}$/i.test(ref)) vinHints.add(ref.toUpperCase());
-  }
-  for (const v of S.vinRecords) {
-    if (v.vin && vinHints.has(v.vin.toUpperCase()) && !vinSeen0.has(v.vin)) {
-      vinRecords.push(v);
-      vinSeen0.add(v.vin);
-    }
-  }
-  const uniqueVins = vinRecords;
+  const invoiceList = Object.values(byInv).map(g => g[0]);  // 每个发票取 line_no=1 那条作为代表（发票级字段都在那）
 
-  // 为每张发票单独算它的关联 VIN 列表（VIN 优先 PO 兜底）
-  const invoiceVins = invoices.map(inv => {
-    const myVins = [];
-    const seen = new Set();
-    if (inv.reference) {
-      const ref = inv.reference.replace(/\s/g, '');
-      // 优先：reference 像 VIN
-      if (!/PO|CS/i.test(ref) && /^[A-Z0-9]{6,}$/i.test(ref)) {
-        const targetVin = ref.toUpperCase();
-        for (const v of S.vinRecords) {
-          if (v.vin && v.vin.toUpperCase() === targetVin && !seen.has(v.vin)) {
-            myVins.push(v);
-            seen.add(v.vin);
-          }
-        }
-      }
-      // 兜底：PO 归一化
-      if (!myVins.length) {
-        const npo = normPO(inv.reference);
-        for (const v of S.vinRecords) {
-          if (!v.contract_no) continue;
-          if (normPO(v.contract_no) === npo && !seen.has(v.vin)) {
-            myVins.push(v);
-            seen.add(v.vin);
-          }
-        }
-      }
-    }
-    return { invoice: inv, vins: myVins };
-  });
-
-  // 关联的商务表
-  const bizContracts = S.bizContracts.filter(b => contractNos.has(b.contract_no) ||
-    [...contractNos].some(c => normPO(c) === normPO(b.contract_no)));
-
-  // 汇总金额（toPay 用 to_pay_amount，fallback balance_aud）
-  const stmtTotal = invoices.reduce((s, i) => s + Number(i.invoice_amount || 0), 0);
-  const paid = invoices.reduce((s, i) => s + Number(i.payments || 0), 0);
-  const toPay = invoices.reduce((s, i) => {
+  // 汇总
+  const stmtTotal = invoiceList.reduce((s, i) => s + Number(i.invoice_amount || 0), 0);
+  const toPay = invoiceList.reduce((s, i) => {
     const v = i.to_pay_amount != null ? Number(i.to_pay_amount) : Number(i.balance_aud || 0);
     return s + v;
   }, 0);
-  const bizTotal = bizContracts.reduce((s, b) => s + Number(b.contract_total || 0), 0);
 
-  // VIN 统计
-  const vinByStatus = { '已全款': 0, '未全款': 0, '未售出': 0, '特殊': 0, '未知': 0 };
-  let totalSale = 0, totalProfit = 0;
-  for (const v of uniqueVins) {
-    const st = v.sale_status || '未知';
-    vinByStatus[st] = (vinByStatus[st] || 0) + 1;
-    totalSale += Number(v.sale_total_inc_gst || 0);
-    totalProfit += Number(v.gross_profit || 0);
+  // 涉及 PO（去重）
+  const poSet = new Set();
+  for (const i of invoiceList) {
+    if (i.po_short) poSet.add(i.po_short);
+    else if (i.reference) poSet.add(i.reference);
   }
+  const poList = [...poSet].join(', ');
 
-  const paymentMethods = [...new Set(invoices.map(i => i.payment_method).filter(Boolean))].join(', ') || '—';
-  const contractTypes = [...new Set(invoices.map(i => i.contract_type).filter(Boolean))].join(', ') || '—';
-  const contractsList = [...contractNos].join(', ');
+  const paymentMethods = [...new Set(invoiceList.map(i => i.payment_method).filter(Boolean))].join(', ') || '—';
+  const contractTypes = [...new Set(invoiceList.map(i => i.contract_type).filter(Boolean))].join(', ') || '—';
 
-  // 风险提示
-  const warnings = [];
-  if (vinByStatus['未售出'] > 0) {
-    const unsoldCost = uniqueVins.filter(v => v.sale_status === '未售出').reduce((s, v) => s + Number(v.purchase_total || 0), 0);
-    warnings.push(`${vinByStatus['未售出']} 台未售出（采购成本 AUD ${fmt(unsoldCost)}）`);
-  }
-  if (vinByStatus['未全款'] > 0) {
-    warnings.push(`${vinByStatus['未全款']} 台已售但未全款`);
-  }
-  const negProfitVins = uniqueVins.filter(v => v.gross_profit != null && v.gross_profit < 0);
-  if (negProfitVins.length) {
-    warnings.push(`${negProfitVins.length} 台毛利为负`);
-  }
+  // 保存用于导出
+  S.currentReport = { reconNo, invoiceList, byInv, stmtTotal, toPay, poList, paymentMethods, contractTypes };
 
-  // 缓存当前报告用于导出
-  S.currentReport = { reconNo, invoices, invoiceVins, vinRecords: uniqueVins, bizContracts, contractsList,
-    stmtTotal, paid, toPay, bizTotal, vinByStatus, totalSale, totalProfit, warnings };
-
-  const ssBadge = (s) => {
-    if (s === '已全款') return '<span class="badge b-ok">已全款</span>';
-    if (s === '未全款') return '<span class="badge b-wn">未全款</span>';
-    if (s === '未售出') return '<span class="badge b-mu">未售出</span>';
-    if (s === '特殊')   return '<span class="badge b-pu">特殊</span>';
-    return s ? `<span class="badge b-mu">${esc(s)}</span>` : '—';
-  };
+  // 按 invoice_no 排序
+  invoiceList.sort((a, b) => (a.invoice_no || '').localeCompare(b.invoice_no || ''));
 
   document.getElementById('reportArea').innerHTML = `
     <div class="report-card">
@@ -2516,32 +2284,20 @@ function genReport() {
           <div style="background:linear-gradient(135deg,var(--accent-soft),#dbeafe);padding:22px;border-radius:var(--r-lg);border:1px solid #bfdbfe">
             <div class="report-stat-label">💰 本次申请支付</div>
             <div class="report-stat-value big" style="font-size:32px;margin-top:6px">AUD ${fmt(toPay)}</div>
-            <div style="font-size:11px;color:var(--text-3);margin-top:6px;font-family:var(--mono)">${invoices.some(i => i.to_pay_amount != null && Math.abs(Number(i.to_pay_amount) - Number(i.balance_aud || 0)) > 0.01) ? '（含手动调整）' : '（默认 = Balance）'}</div>
+            <div style="font-size:11px;color:var(--text-3);margin-top:6px;font-family:var(--mono)">${invoiceList.some(i => i.to_pay_amount != null && Math.abs(Number(i.to_pay_amount) - Number(i.balance_aud || 0)) > 0.01) ? '（含手动调整）' : '（默认 = Balance）'}</div>
           </div>
           <div style="background:var(--surface-2);padding:22px;border-radius:var(--r-lg);border:1px solid var(--border)">
             <div class="report-stat-label">📋 涉及合同</div>
-            <div class="report-stat-value" style="font-size:32px;margin-top:6px">${contractNos.size} <span style="font-size:18px;color:var(--text-3)">个</span></div>
-            <div style="font-size:11px;color:var(--text-3);margin-top:6px;font-family:var(--mono);max-height:38px;overflow:hidden">${esc(contractsList)}</div>
+            <div class="report-stat-value" style="font-size:32px;margin-top:6px">${poSet.size} <span style="font-size:18px;color:var(--text-3)">个</span></div>
+            <div style="font-size:11px;color:var(--text-3);margin-top:6px;font-family:var(--mono);max-height:38px;overflow:hidden">${esc(poList)}</div>
           </div>
           <div style="background:var(--surface-2);padding:22px;border-radius:var(--r-lg);border:1px solid var(--border)">
             <div class="report-stat-label">📄 Statement 发票</div>
-            <div class="report-stat-value" style="font-size:32px;margin-top:6px">${invoices.length} <span style="font-size:18px;color:var(--text-3)">张</span></div>
+            <div class="report-stat-value" style="font-size:32px;margin-top:6px">${invoiceList.length} <span style="font-size:18px;color:var(--text-3)">张</span></div>
             <div style="font-size:11px;color:var(--text-3);margin-top:6px">账面合计 AUD ${fmt(stmtTotal)}</div>
           </div>
         </div>
         <div class="report-summary">
-          <div>
-            <div class="report-stat-label">Balance AUD 合计</div>
-            <div class="report-stat-value">${fmt(invoices.reduce((s, i) => s + Number(i.balance_aud || 0), 0))}</div>
-          </div>
-          <div>
-            <div class="report-stat-label">已付</div>
-            <div class="report-stat-value ok">${fmt(paid)}</div>
-          </div>
-          <div>
-            <div class="report-stat-label">商务表合同总额</div>
-            <div class="report-stat-value">${bizTotal ? fmt(bizTotal) : '—'}</div>
-          </div>
           <div>
             <div class="report-stat-label">付款方式 / 合同类别</div>
             <div class="report-stat-value" style="font-size:14px">${esc(paymentMethods)} / ${esc(contractTypes)}</div>
@@ -2549,58 +2305,29 @@ function genReport() {
         </div>
       </div>
 
-      ${warnings.length ? `
       <div class="report-section">
-        <div class="report-section-title">⚠️ 风险提示</div>
-        <div class="report-warn">${warnings.map(w => `· ${esc(w)}`).join('<br>')}</div>
-      </div>` : `
-      <div class="report-section">
-        <div class="report-ok-banner">✓ 所有关联设备均已售出且未发现负毛利，可正常付款</div>
-      </div>`}
-
-      <div class="report-section">
-        <div class="report-section-title">📄 Statement 发票明细 (${invoices.length} 张 / ${invoiceVins.reduce((s, x) => s + Math.max(1, x.vins.length), 0)} 行)</div>
+        <div class="report-section-title">📄 Statement 发票明细 (${invoiceList.length} 张)</div>
         <table class="report-table">
           <thead><tr>
-            <th>发票号</th><th>发票日期</th><th>到期日</th><th>PO/合同号</th>
+            <th>发票号</th><th>发票日期</th><th>到期日</th><th>PO</th>
             <th class="num">Invoice Amount</th><th class="num">本次应付</th>
-            <th>VIN</th><th>销售单号</th><th>销售状态</th>
-            <th class="num">毛利</th><th class="num">毛利率</th>
           </tr></thead>
-          <tbody>${invoiceVins.map(({ invoice: i, vins }) => {
+          <tbody>${invoiceList.map(i => {
             const tp = i.to_pay_amount != null ? Number(i.to_pay_amount) : Number(i.balance_aud || 0);
             const custom = i.to_pay_amount != null && Math.abs(Number(i.to_pay_amount) - Number(i.balance_aud || 0)) > 0.01;
-            // 没有关联 VIN：占一行，VIN 相关列显示 —
-            const rowList = vins.length ? vins : [null];
-            return rowList.map((v, idx) => {
-              const isFirst = idx === 0;
-              const rowBorderStyle = idx === rowList.length - 1 ? '' : 'border-bottom:1px dashed var(--border)';
-              // 前 6 列只在第一行显示（rowSpan）
-              const headCells = isFirst ? `
-                <td class="mono" style="font-size:12px;color:var(--accent);font-weight:600;vertical-align:top" rowspan="${rowList.length}">${esc(i.invoice_no)}</td>
-                <td class="mono" style="font-size:12px;vertical-align:top" rowspan="${rowList.length}">${esc(i.invoice_date) || '—'}</td>
-                <td class="mono" style="font-size:12px;vertical-align:top" rowspan="${rowList.length}">${esc(i.due_date) || '—'}</td>
-                <td class="mono" style="font-size:11px;vertical-align:top" rowspan="${rowList.length}">${esc(i.reference) || '—'}</td>
-                <td class="num" style="vertical-align:top" rowspan="${rowList.length}">${fmt(i.invoice_amount)}</td>
-                <td class="num" style="font-weight:700;color:${custom ? 'var(--warn)' : 'var(--accent-2)'};background:var(--accent-soft);vertical-align:top" rowspan="${rowList.length}">${fmt(tp)}${custom ? ' *' : ''}</td>` : '';
-              // VIN 侧
-              const vinCells = v ? `
-                <td class="mono" style="font-size:12px;font-weight:600;${rowBorderStyle}">${esc(v.vin)}</td>
-                <td class="mono" style="font-size:11px;color:var(--warn);${rowBorderStyle}">${esc(v.sale_invoice_no) || '—'}</td>
-                <td style="${rowBorderStyle}">${ssBadge(v.sale_status)}</td>
-                <td class="num" style="font-weight:600;color:${v.gross_profit > 0 ? 'var(--ok)' : v.gross_profit < 0 ? 'var(--err)' : 'var(--text-3)'};${rowBorderStyle}">${v.gross_profit != null ? fmt(v.gross_profit) : '—'}</td>
-                <td class="num" style="color:${v.gross_profit_rate > 20 ? 'var(--ok)' : v.gross_profit_rate > 0 ? 'var(--warn)' : v.gross_profit_rate < 0 ? 'var(--err)' : 'var(--text-3)'};${rowBorderStyle}">${v.gross_profit_rate != null ? v.gross_profit_rate + '%' : '—'}</td>` : `
-                <td colspan="5" style="text-align:center;color:var(--text-3);font-size:11px">未关联设备（请确认 PO/VIN 是否在采购录入表中）</td>`;
-              return `<tr>${headCells}${vinCells}</tr>`;
-            }).join('');
+            return `<tr>
+              <td class="mono" style="font-size:12px;color:var(--accent);font-weight:600">${esc(i.invoice_no)}</td>
+              <td class="mono" style="font-size:12px">${esc(i.invoice_date) || '—'}</td>
+              <td class="mono" style="font-size:12px">${esc(i.due_date) || '—'}</td>
+              <td class="mono" style="font-size:11px">${esc(i.po_short || i.reference) || '—'}</td>
+              <td class="num">${fmt(i.invoice_amount)}</td>
+              <td class="num" style="font-weight:700;color:${custom ? 'var(--warn)' : 'var(--accent-2)'};background:var(--accent-soft)">${fmt(tp)}${custom ? ' *' : ''}</td>
+            </tr>`;
           }).join('')}
           <tr style="background:var(--surface-2);font-weight:700">
             <td colspan="4" style="text-align:right">合计</td>
             <td class="num">${fmt(stmtTotal)}</td>
             <td class="num" style="color:var(--accent-2);background:var(--accent-soft)">${fmt(toPay)}</td>
-            <td colspan="3" style="text-align:right;font-size:12px;color:var(--text-2)">总毛利</td>
-            <td class="num" style="color:${totalProfit > 0 ? 'var(--ok)' : totalProfit < 0 ? 'var(--err)' : 'var(--text-3)'}">${fmt(totalProfit)}</td>
-            <td class="num">${totalSale > 0 ? r2(totalProfit / totalSale * 100) + '%' : '—'}</td>
           </tr>
           </tbody>
         </table>
@@ -2629,49 +2356,25 @@ function expReport() {
     ['生成时间', new Date().toLocaleString('zh-CN')],
     [],
     ['本次申请支付 (AUD)', r.toPay],
-    ['Statement 发票数', r.invoices.length],
-    ['Statement 总额', r.stmtTotal],
-    ['已付', r.paid],
-    ['商务表合同总额', r.bizTotal],
-    ['涉及合同', r.contractsList],
-    [],
-    ['关联设备数', r.vinRecords.length],
-    ['  已全款', r.vinByStatus['已全款']],
-    ['  未全款', r.vinByStatus['未全款']],
-    ['  未售出', r.vinByStatus['未售出']],
-    ['销售总额', r.totalSale],
-    ['毛利合计', r.totalProfit],
+    ['Statement 发票数', r.invoiceList.length],
+    ['账面合计', r.stmtTotal],
+    ['涉及合同', r.poList],
+    ['付款方式', r.paymentMethods],
+    ['合同类别', r.contractTypes],
   ];
-  if (r.warnings.length) {
-    summary.push([], ['⚠️ 风险提示']);
-    r.warnings.forEach(w => summary.push([w]));
-  }
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(summary), '汇总');
 
-  // Sheet 2: 发票明细（按 VIN 展开多行，和网页显示一致）
-  const sheet2Rows = [];
-  for (const { invoice: i, vins } of r.invoiceVins) {
-    const tp = i.to_pay_amount != null ? i.to_pay_amount : i.balance_aud;
-    const rowList = vins.length ? vins : [null];
-    for (let idx = 0; idx < rowList.length; idx++) {
-      const v = rowList[idx];
-      const isFirst = idx === 0;
-      sheet2Rows.push({
-        '发票号': isFirst ? i.invoice_no : '',
-        '发票日期': isFirst ? i.invoice_date : '',
-        '到期日': isFirst ? i.due_date : '',
-        'PO/合同号': isFirst ? i.reference : '',
-        'Invoice Amount': isFirst ? i.invoice_amount : '',
-        '本次应付': isFirst ? tp : '',
-        'VIN': v ? v.vin : '',
-        '销售单号': v ? v.sale_invoice_no : '',
-        '销售状态': v ? v.sale_status : '',
-        '毛利': v ? v.gross_profit : '',
-        '毛利率%': v ? v.gross_profit_rate : '',
-      });
-    }
-  }
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sheet2Rows), '发票明细');
+  // Sheet 2: 发票明细（每张发票一行）
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(
+    r.invoiceList.map(i => ({
+      '发票号': i.invoice_no,
+      '发票日期': i.invoice_date,
+      '到期日': i.due_date,
+      'PO': i.po_short || i.reference,
+      'Invoice Amount': i.invoice_amount,
+      '本次应付': i.to_pay_amount != null ? i.to_pay_amount : i.balance_aud,
+    }))
+  ), '发票明细');
 
   XLSX.writeFile(wb, `付款申请_${r.reconNo}_${S.store}_${today()}.xlsx`);
 }
@@ -2682,32 +2385,29 @@ function expReport() {
 function expT1() {
   const rows = S.stmtInvoices.filter(r => r.statement_month === S.month);
   if (!rows.length) { toast('无数据可导出', 'wn'); return; }
-  const data = rows.map(r => ({
-    '发票日期': r.invoice_date, '发票号': r.invoice_no, 'PO/合同号': r.reference,
-    '到期日': r.due_date, 'Invoice Amount': r.invoice_amount,
+  // 按 invoice_no + line_no 排序
+  const sorted = [...rows].sort((a, b) => {
+    if (a.invoice_no !== b.invoice_no) return a.invoice_no < b.invoice_no ? -1 : 1;
+    return (a.line_no || 1) - (b.line_no || 1);
+  });
+  const data = sorted.map(r => ({
+    '发票日期': r.invoice_date, '发票号': r.invoice_no,
+    'PO': r.po_short || r.reference,
+    'VIN': r.vin,
+    '到期日': r.due_date,
+    'Unit Price': r.unit_price,
+    'GST': r.gst_rate,
+    'Amount AUD': r.amount_aud,
+    'Invoice Amount': r.invoice_amount,
     '已付': r.payments, 'Balance AUD': r.balance_aud,
     '本次应付': r.to_pay_amount != null ? r.to_pay_amount : r.balance_aud,
     '状态分类': r.month_category, '对账号': r.recon_no,
-    '付款方式': r.payment_method, '合同类别': r.contract_type, '付款日期': r.payment_date,
+    '付款方式': r.payment_method, '合同类别': r.contract_type,
   }));
   const ws = XLSX.utils.json_to_sheet(data);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Statement');
   XLSX.writeFile(wb, `Statement_${S.store}_${S.month}.xlsx`);
-}
-
-function expT2() {
-  if (!S.vinRecords.length) { toast('无数据可导出', 'wn'); return; }
-  const data = S.vinRecords.map(r => ({
-    '合同号': r.contract_no, 'VIN': r.vin, '型号/规格': r.model_spec,
-    '采购价(不含税)': r.purchase_price_ex, 'GST': r.purchase_gst, '采购合计': r.purchase_total,
-    '销售单号': r.sale_invoice_no, '销售价(不含税)': r.sale_price_ex, '销售合计(含税)': r.sale_total_inc_gst,
-    '毛利': r.gross_profit, '毛利率%': r.gross_profit_rate, '销售状态': r.sale_status,
-  }));
-  const ws = XLSX.utils.json_to_sheet(data);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, '发票明细');
-  XLSX.writeFile(wb, `发票明细_${S.store}.xlsx`);
 }
 
 // ════════════════════════════════════════════════════════════
