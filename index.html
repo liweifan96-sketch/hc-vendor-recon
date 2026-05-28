@@ -1857,25 +1857,35 @@ async function handleInvoiceZip(input) {
             method: 'DELETE',
             headers: { 'apikey': SK, 'Authorization': `Bearer ${SK}` },
           });
-          // 3) 重新插入 N 行
-          const newRows = r.parsed.lines.map((line, idx) => {
-            const row = {
-              store: headInv.store || S.store,
-              statement_month: targetMonth,
-              invoice_no: headInv.invoice_no,
-              line_no: idx + 1,
-              vin: line.vin,
-              model: line.model,
-              po_short: r.parsed.po_short,
-              so_no: r.parsed.so_no,
-              unit_price: line.unit_price,
-              gst_rate: line.gst_rate,
-              amount_aud: line.amount,
-            };
-            // 发票级字段只放第一行
-            if (idx === 0) Object.assign(row, preserved);
-            return row;
-          });
+          // 3) 重新插入 N 行（所有行 key 必须完全一致，否则 PostgREST 报 PGRST102）
+          //    发票级字段只在第一行有值，其他行填 null
+          const newRows = r.parsed.lines.map((line, idx) => ({
+            store: headInv.store || S.store,
+            statement_month: targetMonth,
+            invoice_no: headInv.invoice_no,
+            line_no: idx + 1,
+            vin: line.vin || null,
+            model: line.model || null,
+            po_short: r.parsed.po_short || null,
+            so_no: r.parsed.so_no || null,
+            unit_price: line.unit_price != null ? line.unit_price : null,
+            gst_rate: line.gst_rate || null,
+            amount_aud: line.amount != null ? line.amount : null,
+            // 发票级字段：只第一行有值，其余 null（保证所有行 key 一致）
+            invoice_amount: idx === 0 ? preserved.invoice_amount : null,
+            payments:       idx === 0 ? preserved.payments : null,
+            balance_aud:    idx === 0 ? preserved.balance_aud : null,
+            to_pay_amount:  idx === 0 ? preserved.to_pay_amount : null,
+            less_amount:    idx === 0 ? preserved.less_amount : null,
+            recon_no:       idx === 0 ? preserved.recon_no : null,
+            payment_method: idx === 0 ? preserved.payment_method : null,
+            contract_type:  idx === 0 ? preserved.contract_type : null,
+            month_category: idx === 0 ? preserved.month_category : null,
+            invoice_date:   idx === 0 ? preserved.invoice_date : null,
+            due_date:       idx === 0 ? preserved.due_date : null,
+            reference:      idx === 0 ? preserved.reference : null,
+            ignored:        idx === 0 ? (preserved.ignored || false) : false,
+          }));
           await api('POST', 'statements_invoices', newRows);
           rebuilt++;
           inserted += newRows.length;
