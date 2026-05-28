@@ -540,7 +540,7 @@ tr.expand-row td {
 
   <div class="help-tip">
     <span>💡</span>
-    <div><strong>📦 上传发票压缩包</strong>：自动识别 PDF 内的 VIN / Unit Price / GST / Amount 并填入对应发票（按发票号<strong>跨月匹配</strong>，ZIP 里可含子文件夹）。设备按 VIN 展开多行，配件/运费合并成 1 行。<br><strong>双击</strong>任意单元格可手动修改。<strong>重传时</strong>：本次应付、对账号、付款方式等手填字段会被保留；已识别的 VIN 也不会被覆盖。</div>
+    <div><strong>📦 上传发票压缩包</strong>：自动识别 PDF 内的 车型 / VIN / Unit Price / GST / Amount / Less Amount 并填入对应发票（按发票号<strong>跨月匹配</strong>，ZIP 可含子文件夹）。设备按 VIN 展开多行，配件/运费合并成 1 行；若某发票之前识别行数不全，重传会自动重建补齐。<br><strong>双击</strong>任意单元格可改；操作列 <strong>＋插行</strong> 可给某发票手动加一行（识别漏的设备自己补）。</div>
   </div>
 
   <div class="table-wrap"><div class="table-scroll">
@@ -549,6 +549,7 @@ tr.expand-row td {
         <th onclick="srt('invoice_date')">发票日期</th>
         <th onclick="srt('invoice_no')">发票号</th>
         <th>PO / 合同号</th>
+        <th>车型</th>
         <th>VIN</th>
         <th onclick="srt('due_date')">到期日</th>
         <th class="num" style="border-left:2px solid var(--border)">Unit Price</th>
@@ -565,7 +566,7 @@ tr.expand-row td {
         <th>合同类别</th>
         <th>操作</th>
       </tr></thead>
-      <tbody id="t1b"><tr><td colspan="18"><div class="empty"><div class="empty-icon">📄</div><div class="empty-text">请先导入 Statement PDF</div></div></td></tr></tbody>
+      <tbody id="t1b"><tr><td colspan="19"><div class="empty"><div class="empty-icon">📄</div><div class="empty-text">请先导入 Statement PDF</div></div></td></tr></tbody>
     </table>
   </div></div>
 </div>
@@ -1429,6 +1430,7 @@ function parseStmt(txt, month) {
     if (nums.length >= 3) {
       rows.push({
         store, statement_month: month, invoice_no: inv.no,
+        line_no: 1,
         invoice_date: dates[0] || '',
         due_date: dates[1] || dates[0] || '',
         reference: rf ? rf[0].trim() : '',
@@ -1529,7 +1531,7 @@ async function doImport() {
     showL('检查已有数据...');
     const enc = encodeURIComponent(records[0].store);
     const existing = await api('GET', 'statements_invoices', null,
-      `?store=eq.${enc}&statement_month=eq.${month}&select=invoice_no,to_pay_amount,recon_no,payment_method,contract_type,payment_date,ignored&limit=10000`) || [];
+      `?store=eq.${enc}&statement_month=eq.${month}&or=(line_no.eq.1,line_no.is.null)&select=invoice_no,line_no,to_pay_amount,recon_no,payment_method,contract_type,payment_date,ignored&limit=10000`) || [];
     const existMap = {};
     for (const r of existing) existMap[r.invoice_no] = r;
 
@@ -1586,7 +1588,7 @@ async function doImport() {
       const batch = records.slice(i, i + BATCH);
       showL('保存发票', `${Math.min(i + BATCH, records.length)} / ${records.length}`);
       try {
-        await upsert('statements_invoices', batch, 'store,statement_month,invoice_no');
+        await upsert('statements_invoices', batch, 'store,statement_month,invoice_no,line_no');
         saved += batch.length;
       } catch (e) {
         failed += batch.length;
@@ -1652,6 +1654,7 @@ function parseInvoicePdf(text) {
         gst_rate: am[3],
         amount: parseFloat(am[4].replace(/,/g, '')),
         vins: [],
+        models: [],
       };
       blocks.push(cur);
       continue;
@@ -1662,6 +1665,9 @@ function parseInvoicePdf(text) {
       while ((sm = serialStdRe.exec(ln)) !== null) cur.vins.push(sm[1]);
       const lm = ln.match(serialListRe);
       if (lm) cur.vins.push(lm[1]);
+      // 车型：Model No: XXX 或 Model: XXX（含无空格）
+      const mo = ln.match(/Model\s*(?:No)?\s*[:：]\s*([A-Z0-9\-]+)/i);
+      if (mo) cur.models.push(mo[1]);
     }
   }
 
@@ -1669,10 +1675,11 @@ function parseInvoicePdf(text) {
   const deviceLines = [];
   const accessoryLines = [];
   for (const b of blocks) {
+    const model = b.models.length ? b.models[0] : null;
     if (b.vins.length > 0) {
       const per = r2(b.amount / b.vins.length);
       for (const v of b.vins) {
-        deviceLines.push({ vin: v, unit_price: b.unit_price, gst_rate: b.gst_rate, amount: per });
+        deviceLines.push({ vin: v, model, unit_price: b.unit_price, gst_rate: b.gst_rate, amount: per });
       }
     } else {
       accessoryLines.push(b);
@@ -1681,13 +1688,14 @@ function parseInvoicePdf(text) {
 
   let lineNo = 1;
   for (const d of deviceLines) {
-    result.lines.push({ line_no: lineNo++, vin: d.vin, is_accessory: false, unit_price: d.unit_price, gst_rate: d.gst_rate, amount: d.amount });
+    result.lines.push({ line_no: lineNo++, vin: d.vin, model: d.model, is_accessory: false, unit_price: d.unit_price, gst_rate: d.gst_rate, amount: d.amount });
   }
   if (accessoryLines.length > 0) {
     const accTotal = accessoryLines.reduce((s, a) => s + a.amount, 0);
     result.lines.push({
       line_no: lineNo++,
       vin: `配件/其他 (${accessoryLines.length}项)`,
+      model: null,
       is_accessory: true,
       unit_price: null,
       gst_rate: accessoryLines[0].gst_rate || null,
@@ -1762,7 +1770,7 @@ async function handleInvoiceZip(input) {
     // 跨月匹配：拉该门店【所有月份】的 Statement 发票
     const enc = encodeURIComponent(S.store);
     const existingStmt = await api('GET', 'statements_invoices', null,
-      `?store=eq.${enc}&select=id,statement_month,invoice_no,line_no,vin,po_short,unit_price,gst_rate,amount_aud,less_amount,recon_no,payment_method,contract_type,to_pay_amount&limit=50000`) || [];
+      `?store=eq.${enc}&select=id,statement_month,invoice_no,line_no,vin,model,po_short,unit_price,gst_rate,amount_aud,less_amount,recon_no,payment_method,contract_type,to_pay_amount&limit=50000`) || [];
     // 按归一化发票号分组（去空格、大写）
     const normInv = (s) => (s || '').replace(/\s/g, '').toUpperCase();
     const stmtByInv = {};
@@ -1848,6 +1856,7 @@ async function handleInvoiceZip(input) {
               invoice_no: headInv.invoice_no,
               line_no: idx + 1,
               vin: line.vin,
+              model: line.model,
               po_short: r.parsed.po_short,
               so_no: r.parsed.so_no,
               unit_price: line.unit_price,
@@ -1876,6 +1885,7 @@ async function handleInvoiceZip(input) {
         if (exist) {
           const patch = {};
           if (!exist.vin && line.vin)               patch.vin = line.vin;
+          if (!exist.model && line.model)           patch.model = line.model;
           if (!exist.po_short && r.parsed.po_short) patch.po_short = r.parsed.po_short;
           if (!exist.unit_price && line.unit_price != null) patch.unit_price = line.unit_price;
           if (!exist.gst_rate && line.gst_rate)     patch.gst_rate = line.gst_rate;
@@ -2032,7 +2042,7 @@ function renderT1() {
   };
 
   if (!groupList.length) {
-    document.getElementById('t1b').innerHTML = '<tr><td colspan="17"><div class="empty"><div class="empty-icon">🔍</div><div class="empty-text">无匹配数据</div></div></td></tr>';
+    document.getElementById('t1b').innerHTML = '<tr><td colspan="19"><div class="empty"><div class="empty-icon">🔍</div><div class="empty-text">无匹配数据</div></div></td></tr>';
     return;
   }
 
@@ -2063,6 +2073,7 @@ function renderT1() {
 
       // PO + VIN 每行可能不同（识别发票后填充）
       const poCell = `<td class="ec mono" style="font-size:11px;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;${rowSep}" ondblclick="ecText('${r.id}','po_short',this,'statements_invoices')">${esc(r.po_short || r.reference) || '<span style="color:var(--text-3)">双击</span>'}</td>`;
+      const modelCell = `<td class="ec mono" style="font-size:11px;color:var(--text-2);${rowSep}" ondblclick="ecText('${r.id}','model',this,'statements_invoices')">${esc(r.model) || '<span style="color:var(--text-3)">双击</span>'}</td>`;
       const vinCell = `<td class="ec mono" style="font-size:11px;font-weight:600;${rowSep}" ondblclick="ecText('${r.id}','vin',this,'statements_invoices')">${esc(r.vin) || '<span style="color:var(--text-3)">双击</span>'}</td>`;
 
       const dueCell = isFirst ? `
@@ -2084,9 +2095,9 @@ function renderT1() {
         <td class="ec" style="color:var(--warn);font-family:var(--mono);font-size:12px;vertical-align:top" rowspan="${span}" ondblclick="ecText('${r.id}','recon_no',this,'statements_invoices')">${esc(r.recon_no) || '<span style="color:var(--text-3)">双击设置</span>'}</td>
         <td class="ec" style="vertical-align:top" rowspan="${span}" ondblclick="ecSel('${r.id}','payment_method',this,'statements_invoices',['直接支付','贷款'])">${pm || '<span style="color:var(--text-3);font-size:12px">双击设置</span>'}</td>
         <td class="ec" style="vertical-align:top" rowspan="${span}" ondblclick="ecSel('${r.id}','contract_type',this,'statements_invoices',['确认合同','自有'])">${ct || '<span style="color:var(--text-3);font-size:12px">双击设置</span>'}</td>
-        <td style="vertical-align:top" rowspan="${span}"><button class="btn btn-sec btn-sm" style="color:${r.ignored ? 'var(--ok)' : 'var(--err)'}" onclick="togIgnGroup('${r.invoice_no}',${r.ignored})">${r.ignored ? '↩ 恢复' : '忽略'}</button></td>` : '';
+        <td style="vertical-align:top" rowspan="${span}"><button class="btn btn-sec btn-sm" style="color:${r.ignored ? 'var(--ok)' : 'var(--err)'}" onclick="togIgnGroup('${r.invoice_no}',${r.ignored})">${r.ignored ? '↩ 恢复' : '忽略'}</button><button class="btn btn-sec btn-sm" style="color:var(--accent);margin-top:4px" onclick="addInvoiceLine('${r.invoice_no}')" title="给这张发票加一行">＋插行</button></td>` : '';
 
-      html.push(`<tr class="${rowCls}">${dateCell}${poCell}${vinCell}${dueCell}${unitCell}${gstCell}${amountCell}${tailCells}</tr>`);
+      html.push(`<tr class="${rowCls}">${dateCell}${poCell}${modelCell}${vinCell}${dueCell}${unitCell}${gstCell}${amountCell}${tailCells}</tr>`);
     }
   }
   document.getElementById('t1b').innerHTML = html.join('');
@@ -2107,6 +2118,38 @@ async function togIgnGroup(invoiceNo, cur) {
     updStats();
   } catch (e) {
     toast('操作失败', 'er', e.message);
+  }
+}
+
+// 给同一发票号手动加一行（空行，VIN/车型/单价/金额都空，手填）
+async function addInvoiceLine(invoiceNo) {
+  // 找到该发票现有行，确定新 line_no
+  const rows = S.stmtInvoices.filter(r =>
+    r.invoice_no === invoiceNo && r.statement_month === S.month && r.store === S.store);
+  if (!rows.length) { toast('找不到该发票', 'er'); return; }
+  const maxLineNo = Math.max(...rows.map(r => r.line_no || 1));
+  const head = rows.sort((a, b) => (a.line_no || 1) - (b.line_no || 1))[0];
+
+  const newRow = {
+    store: S.store,
+    statement_month: S.month,
+    invoice_no: invoiceNo,
+    line_no: maxLineNo + 1,
+    po_short: head.po_short || null,   // 带上 PO 方便（可改）
+    // VIN/车型/单价/GST/金额 都留空，手填
+  };
+  showL('插入新行...');
+  try {
+    const res = await api('POST', 'statements_invoices', [newRow]);
+    // 把返回的新行加入本地缓存
+    if (Array.isArray(res) && res[0]) S.stmtInvoices.push(res[0]);
+    hideL();
+    toast('已插入新行', 'ok', `发票 ${invoiceNo} 现在多一行，双击填 VIN/车型/单价/金额`, 4000);
+    renderT1();
+  } catch (e) {
+    hideL();
+    toast('插入失败', 'er', e.message);
+    console.error(e);
   }
 }
 
@@ -2498,6 +2541,7 @@ function expT1() {
   const data = sorted.map(r => ({
     '发票日期': fmtDate(r.invoice_date), '发票号': r.invoice_no,
     'PO': r.po_short || r.reference,
+    '车型': r.model,
     'VIN': r.vin,
     '到期日': fmtDate(r.due_date),
     'Unit Price': r.unit_price,
