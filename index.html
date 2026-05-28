@@ -540,7 +540,7 @@ tr.expand-row td {
 
   <div class="help-tip">
     <span>💡</span>
-    <div><strong>📦 上传发票压缩包</strong>：自动识别 PDF 内的 VIN / Unit Price / GST / Amount 并填入对应发票行。一张发票多个 VIN 会展开成多行。<br><strong>双击</strong>任意单元格可手动修改。<strong>重传时</strong>：本次应付、对账号、付款方式、合同类别等手填字段会被保留；已识别的 VIN 也不会被覆盖。</div>
+    <div><strong>📦 上传发票压缩包</strong>：自动识别 PDF 内的 VIN / Unit Price / GST / Amount 并填入对应发票（按发票号<strong>跨月匹配</strong>，ZIP 里可含子文件夹）。设备按 VIN 展开多行，配件/运费合并成 1 行。<br><strong>双击</strong>任意单元格可手动修改。<strong>重传时</strong>：本次应付、对账号、付款方式等手填字段会被保留；已识别的 VIN 也不会被覆盖。</div>
   </div>
 
   <div class="table-wrap"><div class="table-scroll">
@@ -577,14 +577,26 @@ tr.expand-row td {
     </div>
   </div>
 
-  <div class="toolbar" style="background:var(--surface);padding:14px 16px;border-radius:var(--r);border:1px solid var(--border)">
-    <span style="font-size:13px;color:var(--text-2);font-weight:600">对账号</span>
-    <input class="inp mono" id="reconQuery" placeholder="如 S2604-D" style="width:200px" list="reconList">
+  <div class="toolbar" style="background:var(--surface);padding:16px;border-radius:var(--r);border:1px solid var(--border);display:block">
+    <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:flex-end">
+      <div>
+        <div style="font-size:12px;color:var(--text-2);font-weight:600;margin-bottom:5px">💵 对账号（直接支付）</div>
+        <input class="inp mono" id="reconQuery" placeholder="如 202604" style="width:180px" list="reconList">
+      </div>
+      <div>
+        <div style="font-size:12px;color:var(--text-2);font-weight:600;margin-bottom:5px">🏦 对账号（贷款）</div>
+        <input class="inp mono" id="reconQueryLoan" placeholder="如 202604L（可空）" style="width:180px" list="reconList">
+      </div>
+      <div>
+        <div style="font-size:12px;color:var(--text-2);font-weight:600;margin-bottom:5px">✏️ 中间金额（前期贷款本期支付）</div>
+        <input class="inp mono" id="midAmount" placeholder="0.00" style="width:160px" value="0">
+      </div>
+      <button class="btn btn-pri btn-sm" onclick="genReport()">生成报告</button>
+      <button class="btn btn-sec btn-sm" onclick="window.print()" id="printBtn" style="display:none">🖨️ 打印</button>
+      <button class="btn btn-sec btn-sm" onclick="expReport()" id="expBtn" style="display:none">📥 导出 Excel</button>
+    </div>
     <datalist id="reconList"></datalist>
-    <button class="btn btn-pri btn-sm" onclick="genReport()">生成报告</button>
-    <button class="btn btn-sec btn-sm" onclick="window.print()" id="printBtn" style="display:none">🖨️ 打印</button>
-    <button class="btn btn-sec btn-sm" onclick="expReport()" id="expBtn" style="display:none">📥 导出 Excel</button>
-    <div style="margin-left:auto;font-size:11px;color:var(--text-3);font-family:var(--mono)">提示：从商务汇总页点击对账号可自动跳转到此页</div>
+    <div style="font-size:11px;color:var(--text-3);font-family:var(--mono);margin-top:10px">两个对账号都可选填；中间金额默认 0，按需手填。剩余未申请支付 = Statement总额 − 贷款 − 直接支付 − 中间金额</div>
   </div>
 
   <div id="reportArea">
@@ -1451,6 +1463,18 @@ function parseDue(s) {
   return new Date(+m[3], mo[m[2]] || 0, +m[1]);
 }
 
+// 英文日期 "1 Mar 2026" → 数字 "2026-03-01"；已是数字格式或无法解析则原样返回
+function fmtDate(s) {
+  if (!s) return s;
+  const mo = { Jan:'01',Feb:'02',Mar:'03',Apr:'04',May:'05',Jun:'06',Jul:'07',Aug:'08',Sep:'09',Oct:'10',Nov:'11',Dec:'12' };
+  const m = String(s).match(/(\d{1,2})\s+([A-Za-z]{3})\s+(\d{4})/);
+  if (!m) return s;   // 不是英文日期格式，原样返回
+  const mm = mo[m[2].charAt(0).toUpperCase() + m[2].slice(1, 3).toLowerCase()];
+  if (!mm) return s;
+  const dd = m[1].padStart(2, '0');
+  return `${m[3]}-${mm}-${dd}`;
+}
+
 async function doImport() {
   const month = document.getElementById('impM').value;
   if (!month) { toast('请选择月份', 'wn'); return; }
@@ -1587,56 +1611,80 @@ async function doImport() {
 function parseInvoicePdf(text) {
   const result = { invoice_no: null, invoice_date: null, po_short: null, so_no: null, due_date: null, lines: [] };
 
-  // Invoice Number
-  let m = text.match(/Invoice Number\s*\n\s*(\S+)/);
+  // 发票号：DJJ-XXXXX（可能带 -N 后缀），全局找第一个
+  let m = text.match(/(DJJ-\d+(?:-\d+)?)/);
   if (m) result.invoice_no = m[1].trim();
 
-  // Invoice Date
-  m = text.match(/Invoice Date\s*\n\s*(\d+\s+\w+\s+\d{4})/);
-  if (m) result.invoice_date = m[1].trim();
+  // 发票日期：DD Mon YYYY 或 DDMonYYYY（无空格）
+  m = text.match(/(\d{1,2})\s*([A-Z][a-z]{2})\s*(\d{4})/);
+  if (m) result.invoice_date = `${m[1]} ${m[2]} ${m[3]}`;
 
-  // Reference (可能跨行)：抓 Reference 后到 ABN 之间的内容
-  m = text.match(/Reference\s*\n([\s\S]*?)(?=\nABN|\nHC|$)/);
-  if (m) {
-    const refRaw = m[1].replace(/\s+/g, '');   // 合并所有空白
-    // PO 部分: CS/POxxxxx 或 POxxxxx (到下一个 / 前)
-    const poM = refRaw.match(/(CS\/PO[\w]+|PO[-\w]+?)(?=\/SO|$)/i);
-    if (poM) result.po_short = poM[1];
-    const soM = refRaw.match(/(SO\w+)/i);
-    if (soM) result.so_no = soM[1];
-  }
+  // PO：(CS/)PO-XXXXX 在 Reference 里，到 /SO 前
+  m = text.match(/((?:CS\/)?PO[-\w]*?)\/SO/i);
+  if (m) result.po_short = m[1];
+  // SO 号
+  m = text.match(/(SO\d+)/i);
+  if (m) result.so_no = m[1];
 
   // Due Date
-  m = text.match(/Due Date:\s*(\d+\s+\w+\s+\d{4})/);
+  m = text.match(/Due Date:\s*(\d{1,2}\s+\w+\s+\d{4})/);
   if (m) result.due_date = m[1].trim();
 
-  // 找所有 Serial No
+  // 所有 Serial No（全角：或半角:）
   const serials = [];
-  const serialRe = /Serial No:\s*([A-Z0-9]+)/g;
+  const serialRe = /Serial\s*No\s*[:：]\s*([A-Z0-9]+)/g;
   let sm;
   while ((sm = serialRe.exec(text)) !== null) serials.push(sm[1]);
 
-  // 找所有"qty unit_price gst% amount"明细行
-  const lineRe = /^(\d+(?:\.\d+)?)\s+([\d,]+\.\d{2})\s+(\d+%)\s+([\d,]+\.\d{2})\s*$/gm;
-  const lineMatches = [];
+  // 所有"数量 单价 GST% 金额"明细行（前面可能有描述文字，所以不用 ^ 锚定）
+  const lineRe = /(\d+(?:\.\d+)?)\s+([\d,]+\.\d{2})\s+(\d+%)\s+([\d,]+\.\d{2})/g;
+  const allLines = [];
   let lm;
   while ((lm = lineRe.exec(text)) !== null) {
-    lineMatches.push({
-      qty: parseFloat(lm[1]),
+    allLines.push({
       unit_price: parseFloat(lm[2].replace(/,/g, '')),
       gst_rate: lm[3],
       amount: parseFloat(lm[4].replace(/,/g, '')),
     });
   }
 
-  // 配对（按出现顺序）
-  for (let i = 0; i < lineMatches.length; i++) {
+  // 设备行 = 有 Serial 的（前 N 行）；剩余 = 配件行
+  const nSerial = serials.length;
+  const deviceLines = [];
+  const accessoryLines = [];
+  for (let i = 0; i < allLines.length; i++) {
+    if (i < nSerial) {
+      deviceLines.push({ vin: serials[i], ...allLines[i] });
+    } else {
+      accessoryLines.push(allLines[i]);
+    }
+  }
+  // 如果 VIN 数 > 金额行数（打包定价），多出的 VIN 也展开，金额留空
+  for (let i = allLines.length; i < nSerial; i++) {
+    deviceLines.push({ vin: serials[i], unit_price: null, gst_rate: null, amount: null });
+  }
+
+  // 生成最终行：设备每个 1 行；配件合并成 1 行
+  let lineNo = 1;
+  for (const d of deviceLines) {
     result.lines.push({
-      line_no: i + 1,
-      vin: serials[i] || null,
-      unit_price: lineMatches[i].unit_price,
-      gst_rate: lineMatches[i].gst_rate,
-      amount: lineMatches[i].amount,
+      line_no: lineNo++,
+      vin: d.vin,
+      is_accessory: false,
+      unit_price: d.unit_price,
+      gst_rate: d.gst_rate,
+      amount: d.amount,
+    });
+  }
+  if (accessoryLines.length > 0) {
+    const accTotal = accessoryLines.reduce((s, a) => s + a.amount, 0);
+    result.lines.push({
+      line_no: lineNo++,
+      vin: `配件/其他 (${accessoryLines.length}项)`,
+      is_accessory: true,
+      unit_price: null,
+      gst_rate: accessoryLines[0].gst_rate || null,
+      amount: r2(accTotal),
     });
   }
 
@@ -1646,12 +1694,6 @@ function parseInvoicePdf(text) {
 async function handleInvoiceZip(input) {
   const file = input.files[0];
   if (!file) return;
-
-  if (!S.month) {
-    toast('请先在 Statement 对账页选择月份', 'wn');
-    input.value = '';
-    return;
-  }
 
   showL('解压 ZIP...');
   try {
@@ -1679,19 +1721,11 @@ async function handleInvoiceZip(input) {
       try {
         const arr = await entry.async('arraybuffer');
         const pdf = await pdfjsLib.getDocument({ data: arr }).promise;
+        // 按 y 坐标分行提取文字（适配三栏混排布局）
         let text = '';
         for (let i = 1; i <= pdf.numPages; i++) {
           const page = await pdf.getPage(i);
           const content = await page.getTextContent();
-          text += content.items.map(it => it.str).join(' ') + '\n';
-        }
-        // pdf.js 默认用空格连接 items，但我们的正则依赖换行；改成更好的连接方式
-        // 实际上 items 已经按位置排了，重写一次：按 y 坐标分行
-        text = '';
-        for (let i = 1; i <= pdf.numPages; i++) {
-          const page = await pdf.getPage(i);
-          const content = await page.getTextContent();
-          // 按 y 坐标分组（同一行的 item）
           const lines = {};
           for (const item of content.items) {
             const y = Math.round(item.transform[5]);
@@ -1718,22 +1752,24 @@ async function handleInvoiceZip(input) {
 
     showL('匹配 Statement 发票...');
 
-    // 拉当月所有 Statement 发票（用于匹配）
+    // 跨月匹配：拉该门店【所有月份】的 Statement 发票
     const enc = encodeURIComponent(S.store);
     const existingStmt = await api('GET', 'statements_invoices', null,
-      `?store=eq.${enc}&statement_month=eq.${encodeURIComponent(S.month)}&select=id,invoice_no,line_no,vin,po_short,unit_price,gst_rate,amount_aud,recon_no,payment_method,contract_type,to_pay_amount&limit=10000`) || [];
-    // 按 invoice_no 分组
+      `?store=eq.${enc}&select=id,statement_month,invoice_no,line_no,vin,po_short,unit_price,gst_rate,amount_aud,recon_no,payment_method,contract_type,to_pay_amount&limit=50000`) || [];
+    // 按归一化发票号分组（去空格、大写）
+    const normInv = (s) => (s || '').replace(/\s/g, '').toUpperCase();
     const stmtByInv = {};
     for (const r of existingStmt) {
-      if (!stmtByInv[r.invoice_no]) stmtByInv[r.invoice_no] = [];
-      stmtByInv[r.invoice_no].push(r);
+      const key = normInv(r.invoice_no);
+      if (!stmtByInv[key]) stmtByInv[key] = [];
+      stmtByInv[key].push(r);
     }
 
-    // 分类
+    // 分类（用归一化发票号匹配）
     const okResults = results.filter(r => r.ok);
     const failResults = results.filter(r => !r.ok);
-    const matched = okResults.filter(r => stmtByInv[r.parsed.invoice_no]);
-    const unmatched = okResults.filter(r => !stmtByInv[r.parsed.invoice_no]);
+    const matched = okResults.filter(r => stmtByInv[normInv(r.parsed.invoice_no)]);
+    const unmatched = okResults.filter(r => !stmtByInv[normInv(r.parsed.invoice_no)]);
 
     if (!matched.length) {
       hideL();
@@ -1749,40 +1785,37 @@ async function handleInvoiceZip(input) {
       `📦 发票识别完成：\n\n` +
       `· ZIP 总计 ${pdfFiles.length} 个 PDF\n` +
       `· 识别成功 ${okResults.length} 张 / 失败 ${failResults.length} 张\n` +
-      `· 匹配到 ${S.month} Statement: ${matched.length} 张\n` +
-      `· 未匹配（Statement 里没有这个发票号）: ${unmatched.length} 张\n\n` +
-      `准备将识别到的 PO/VIN/单价/GST/金额 写入 Statement。\n` +
-      `已手填的字段（如对账号、付款方式）会被保留。\n\n` +
+      `· 匹配到 Statement（全部月份）: ${matched.length} 张\n` +
+      `· 未匹配（数据库里没有这个发票号）: ${unmatched.length} 张\n\n` +
+      `准备将识别到的 PO/VIN/单价/GST/金额 写入对应发票。\n` +
+      `已手填的字段（对账号、付款方式等）会被保留。\n\n` +
       `是否继续？`
     );
     if (!ok) { toast('已取消', 'wn'); input.value = ''; return; }
 
     showL('写入数据...');
 
-    // 写入：每个匹配的发票
-    //   - 如果 Statement 里这个发票号已有 N 条记录（line_no = 1..N），按 line_no 更新
-    //   - 如果发票识别出 M 行（M > N），多出来的行要 INSERT 新行
-    //   - 如果 M < N，多出来的旧行保留（不删，因为可能用户手填了）
     let updated = 0, inserted = 0, failed = 0;
     for (const r of matched) {
-      const invNo = r.parsed.invoice_no;
-      const existRows = stmtByInv[invNo] || [];
-      // 排序：line_no 小到大
+      const key = normInv(r.parsed.invoice_no);
+      const existRows = stmtByInv[key] || [];
       existRows.sort((a, b) => (a.line_no || 1) - (b.line_no || 1));
+      const headInv = existRows[0];
+      if (!headInv) continue;
+      // 用匹配到的发票实际所在的月份（跨月匹配关键）
+      const targetMonth = headInv.statement_month;
 
       for (let i = 0; i < r.parsed.lines.length; i++) {
         const line = r.parsed.lines[i];
         const targetLineNo = i + 1;
         const exist = existRows[i];
         if (exist) {
-          // 更新现有行：仅填充原本为空的字段
           const patch = {};
           if (!exist.vin && line.vin)               patch.vin = line.vin;
           if (!exist.po_short && r.parsed.po_short) patch.po_short = r.parsed.po_short;
           if (!exist.unit_price && line.unit_price != null) patch.unit_price = line.unit_price;
           if (!exist.gst_rate && line.gst_rate)     patch.gst_rate = line.gst_rate;
           if (exist.amount_aud == null && line.amount != null) patch.amount_aud = line.amount;
-          // line_no 也补上（如果原本是 null）
           if (exist.line_no == null) patch.line_no = targetLineNo;
           if (Object.keys(patch).length > 0) {
             try {
@@ -1790,17 +1823,14 @@ async function handleInvoiceZip(input) {
               updated++;
             } catch (e) {
               failed++;
-              console.error('Update line failed:', invNo, targetLineNo, e);
+              console.error('Update line failed:', r.parsed.invoice_no, targetLineNo, e);
             }
           }
         } else {
-          // 插入新行（同发票号、不同 line_no）—— 复制头部信息但留空已付/Balance（保持发票总额在 line_no=1）
-          const headInv = existRows[0];
-          if (!headInv) continue;
           const newRow = {
             store: headInv.store || S.store,
-            statement_month: S.month,
-            invoice_no: invNo,
+            statement_month: targetMonth,
+            invoice_no: headInv.invoice_no,
             line_no: targetLineNo,
             vin: line.vin,
             po_short: r.parsed.po_short,
@@ -1808,14 +1838,13 @@ async function handleInvoiceZip(input) {
             unit_price: line.unit_price,
             gst_rate: line.gst_rate,
             amount_aud: line.amount,
-            // 这些字段是发票级别的，只在 line_no=1 里有意义；新行留空
           };
           try {
             await api('POST', 'statements_invoices', [newRow]);
             inserted++;
           } catch (e) {
             failed++;
-            console.error('Insert line failed:', invNo, targetLineNo, e);
+            console.error('Insert line failed:', r.parsed.invoice_no, targetLineNo, e);
           }
         }
       }
@@ -1983,7 +2012,7 @@ function renderT1() {
       // 头部 8 列（发票日期、发票号、PO、VIN、到期日、Unit Price、GST、Amount）
       // 注意：PO/VIN/Unit Price/GST/Amount 是每行不同的，发票级别（日期、发票号、到期日）用 rowspan
       const dateCell = isFirst ? `
-        <td class="ec mono" style="font-size:12px;vertical-align:top" rowspan="${span}" ondblclick="ecDate('${r.id}','invoice_date',this,'statements_invoices')">${esc(r.invoice_date) || '—'}</td>
+        <td class="ec mono" style="font-size:12px;vertical-align:top" rowspan="${span}" ondblclick="ecDate('${r.id}','invoice_date',this,'statements_invoices')">${fmtDate(esc(r.invoice_date)) || '—'}</td>
         <td class="ec" style="font-weight:600;color:var(--accent);font-family:var(--mono);font-size:12px;vertical-align:top" rowspan="${span}" ondblclick="ecText('${r.id}','invoice_no',this,'statements_invoices')">${esc(r.invoice_no)}${isOv ? ' <span class="badge b-er">逾期</span>' : ''}${span > 1 ? ` <span class="badge b-mu">${span} 行</span>` : ''}</td>` : '';
 
       // PO + VIN 每行可能不同（识别发票后填充）
@@ -1991,7 +2020,7 @@ function renderT1() {
       const vinCell = `<td class="ec mono" style="font-size:11px;font-weight:600;${rowSep}" ondblclick="ecText('${r.id}','vin',this,'statements_invoices')">${esc(r.vin) || '<span style="color:var(--text-3)">双击</span>'}</td>`;
 
       const dueCell = isFirst ? `
-        <td class="ec mono" style="font-size:12px;color:${isOv ? 'var(--err)' : 'var(--text-2)'};vertical-align:top" rowspan="${span}" ondblclick="ecText('${r.id}','due_date',this,'statements_invoices')">${esc(r.due_date) || '—'}</td>` : '';
+        <td class="ec mono" style="font-size:12px;color:${isOv ? 'var(--err)' : 'var(--text-2)'};vertical-align:top" rowspan="${span}" ondblclick="ecText('${r.id}','due_date',this,'statements_invoices')">${fmtDate(esc(r.due_date)) || '—'}</td>` : '';
 
       // Unit Price / GST / Amount AUD —— 每行
       const unitCell   = `<td class="ec num" style="border-left:2px solid var(--border);${rowSep}" ondblclick="ecText('${r.id}','unit_price',this,'statements_invoices')">${fmt(r.unit_price)}</td>`;
@@ -2213,112 +2242,93 @@ function gotoReport(reconNo) {
 }
 
 function genReport() {
-  const reconNo = document.getElementById('reconQuery').value.trim();
-  if (!reconNo) { toast('请输入对账号', 'wn'); return; }
+  const reconDirect = document.getElementById('reconQuery').value.trim();
+  const reconLoan = document.getElementById('reconQueryLoan').value.trim();
+  const midAmount = pNum(document.getElementById('midAmount').value) || 0;
 
-  // 找出所有匹配的发票（对账号匹配）—— 因为现在一张发票可能多行，要去重到发票级
-  const matched = S.stmtInvoices.filter(r => r.recon_no === reconNo && !r.ignored);
-  if (!matched.length) {
+  if (!reconDirect && !reconLoan) { toast('请至少输入一个对账号', 'wn'); return; }
+
+  // 辅助：按对账号取发票（去重到发票级，每发票取 line_no=1 代表）
+  const getInvoices = (recon) => {
+    if (!recon) return [];
+    const rows = S.stmtInvoices.filter(r => r.recon_no === recon && !r.ignored);
+    const byInv = {};
+    for (const r of rows) {
+      if (!byInv[r.invoice_no]) byInv[r.invoice_no] = [];
+      byInv[r.invoice_no].push(r);
+    }
+    return Object.values(byInv).map(g => {
+      g.sort((a, b) => (a.line_no || 1) - (b.line_no || 1));
+      return g[0];
+    }).sort((a, b) => (a.invoice_no || '').localeCompare(b.invoice_no || ''));
+  };
+
+  const directInvoices = getInvoices(reconDirect);
+  const loanInvoices = getInvoices(reconLoan);
+
+  if (!directInvoices.length && !loanInvoices.length) {
     document.getElementById('reportArea').innerHTML = `
       <div class="empty" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);margin-top:18px">
         <div class="empty-icon">❌</div>
-        <div class="empty-text">未找到对账号 "${esc(reconNo)}" 关联的发票</div>
-        <div style="font-size:11px;color:var(--text-3);margin-top:8px">请确认 Statement 对账页里有发票设置了这个对账号</div>
+        <div class="empty-text">未找到对账号关联的发票</div>
+        <div style="font-size:11px;color:var(--text-3);margin-top:8px">请确认 Statement 对账页里有发票设置了这些对账号</div>
       </div>`;
     document.getElementById('printBtn').style.display = 'none';
     document.getElementById('expBtn').style.display = 'none';
     return;
   }
 
-  // 按 invoice_no 分组（去重到发票级）
-  const byInv = {};
-  for (const r of matched) {
-    if (!byInv[r.invoice_no]) byInv[r.invoice_no] = [];
-    byInv[r.invoice_no].push(r);
+  // 本次应付合计
+  const sumToPay = (list) => list.reduce((s, i) => s + (i.to_pay_amount != null ? Number(i.to_pay_amount) : Number(i.balance_aud || 0)), 0);
+  const directPay = sumToPay(directInvoices);   // ④ 本月应支付（直接支付对账号）
+  const loanPay = sumToPay(loanInvoices);       // ③ 扣减本月门店贷款（贷款对账号）
+
+  // ① 月度 Statement 账单合计 = 当月全部发票的 Balance 合计（按发票级去重）
+  const monthInvSet = {};
+  for (const r of S.stmtInvoices) {
+    if (r.statement_month === S.month && !r.ignored) {
+      if (!monthInvSet[r.invoice_no] || (r.line_no || 1) < (monthInvSet[r.invoice_no].line_no || 1)) {
+        monthInvSet[r.invoice_no] = r;
+      }
+    }
   }
-  // 每个发票按 line_no 排序
-  for (const k in byInv) {
-    byInv[k].sort((a, b) => (a.line_no || 1) - (b.line_no || 1));
-  }
+  const stmtMonthTotal = Object.values(monthInvSet).reduce((s, i) => s + Number(i.balance_aud || 0), 0);
 
-  const invoiceList = Object.values(byInv).map(g => g[0]);  // 每个发票取 line_no=1 那条作为代表（发票级字段都在那）
+  // ⑤ 剩余未申请支付 = ① - ③ - ④ - ②
+  const remaining = r2(stmtMonthTotal - loanPay - directPay - midAmount);
 
-  // 汇总
-  const stmtTotal = invoiceList.reduce((s, i) => s + Number(i.invoice_amount || 0), 0);
-  const toPay = invoiceList.reduce((s, i) => {
-    const v = i.to_pay_amount != null ? Number(i.to_pay_amount) : Number(i.balance_aud || 0);
-    return s + v;
-  }, 0);
-
-  // 涉及 PO（去重）
+  // PO 汇总
   const poSet = new Set();
-  for (const i of invoiceList) {
+  for (const i of [...directInvoices, ...loanInvoices]) {
     if (i.po_short) poSet.add(i.po_short);
     else if (i.reference) poSet.add(i.reference);
   }
-  const poList = [...poSet].join(', ');
 
-  const paymentMethods = [...new Set(invoiceList.map(i => i.payment_method).filter(Boolean))].join(', ') || '—';
-  const contractTypes = [...new Set(invoiceList.map(i => i.contract_type).filter(Boolean))].join(', ') || '—';
+  S.currentReport = {
+    reconDirect, reconLoan, midAmount, directInvoices, loanInvoices,
+    directPay, loanPay, stmtMonthTotal, remaining, poList: [...poSet].join(', '),
+  };
 
-  // 保存用于导出
-  S.currentReport = { reconNo, invoiceList, byInv, stmtTotal, toPay, poList, paymentMethods, contractTypes };
-
-  // 按 invoice_no 排序
-  invoiceList.sort((a, b) => (a.invoice_no || '').localeCompare(b.invoice_no || ''));
-
-  document.getElementById('reportArea').innerHTML = `
-    <div class="report-card">
-      <div class="report-head">
-        <div class="report-title">付款申请单</div>
-        <div class="report-meta">
-          对账号 <strong style="color:var(--warn)">${esc(reconNo)}</strong>
-          · 门店：${esc(S.store)}
-          · 生成时间：${new Date().toLocaleString('zh-CN')}
-        </div>
-      </div>
-
+  // 发票明细表渲染辅助
+  const invTable = (list, title, recon) => {
+    if (!list.length) return '';
+    const sum = list.reduce((s, i) => s + Number(i.invoice_amount || 0), 0);
+    const pay = sumToPay(list);
+    return `
       <div class="report-section">
-        <div class="report-section-title">📊 付款汇总</div>
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:14px">
-          <div style="background:linear-gradient(135deg,var(--accent-soft),#dbeafe);padding:22px;border-radius:var(--r-lg);border:1px solid #bfdbfe">
-            <div class="report-stat-label">💰 本次申请支付</div>
-            <div class="report-stat-value big" style="font-size:32px;margin-top:6px">AUD ${fmt(toPay)}</div>
-            <div style="font-size:11px;color:var(--text-3);margin-top:6px;font-family:var(--mono)">${invoiceList.some(i => i.to_pay_amount != null && Math.abs(Number(i.to_pay_amount) - Number(i.balance_aud || 0)) > 0.01) ? '（含手动调整）' : '（默认 = Balance）'}</div>
-          </div>
-          <div style="background:var(--surface-2);padding:22px;border-radius:var(--r-lg);border:1px solid var(--border)">
-            <div class="report-stat-label">📋 涉及合同</div>
-            <div class="report-stat-value" style="font-size:32px;margin-top:6px">${poSet.size} <span style="font-size:18px;color:var(--text-3)">个</span></div>
-            <div style="font-size:11px;color:var(--text-3);margin-top:6px;font-family:var(--mono);max-height:38px;overflow:hidden">${esc(poList)}</div>
-          </div>
-          <div style="background:var(--surface-2);padding:22px;border-radius:var(--r-lg);border:1px solid var(--border)">
-            <div class="report-stat-label">📄 Statement 发票</div>
-            <div class="report-stat-value" style="font-size:32px;margin-top:6px">${invoiceList.length} <span style="font-size:18px;color:var(--text-3)">张</span></div>
-            <div style="font-size:11px;color:var(--text-3);margin-top:6px">账面合计 AUD ${fmt(stmtTotal)}</div>
-          </div>
-        </div>
-        <div class="report-summary">
-          <div>
-            <div class="report-stat-label">付款方式 / 合同类别</div>
-            <div class="report-stat-value" style="font-size:14px">${esc(paymentMethods)} / ${esc(contractTypes)}</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="report-section">
-        <div class="report-section-title">📄 Statement 发票明细 (${invoiceList.length} 张)</div>
+        <div class="report-section-title">${title}（对账号 ${esc(recon)} · ${list.length} 张）</div>
         <table class="report-table">
           <thead><tr>
             <th>发票号</th><th>发票日期</th><th>到期日</th><th>PO</th>
             <th class="num">Invoice Amount</th><th class="num">本次应付</th>
           </tr></thead>
-          <tbody>${invoiceList.map(i => {
+          <tbody>${list.map(i => {
             const tp = i.to_pay_amount != null ? Number(i.to_pay_amount) : Number(i.balance_aud || 0);
             const custom = i.to_pay_amount != null && Math.abs(Number(i.to_pay_amount) - Number(i.balance_aud || 0)) > 0.01;
             return `<tr>
               <td class="mono" style="font-size:12px;color:var(--accent);font-weight:600">${esc(i.invoice_no)}</td>
-              <td class="mono" style="font-size:12px">${esc(i.invoice_date) || '—'}</td>
-              <td class="mono" style="font-size:12px">${esc(i.due_date) || '—'}</td>
+              <td class="mono" style="font-size:12px">${fmtDate(esc(i.invoice_date)) || '—'}</td>
+              <td class="mono" style="font-size:12px">${fmtDate(esc(i.due_date)) || '—'}</td>
               <td class="mono" style="font-size:11px">${esc(i.po_short || i.reference) || '—'}</td>
               <td class="num">${fmt(i.invoice_amount)}</td>
               <td class="num" style="font-weight:700;color:${custom ? 'var(--warn)' : 'var(--accent-2)'};background:var(--accent-soft)">${fmt(tp)}${custom ? ' *' : ''}</td>
@@ -2326,14 +2336,50 @@ function genReport() {
           }).join('')}
           <tr style="background:var(--surface-2);font-weight:700">
             <td colspan="4" style="text-align:right">合计</td>
-            <td class="num">${fmt(stmtTotal)}</td>
-            <td class="num" style="color:var(--accent-2);background:var(--accent-soft)">${fmt(toPay)}</td>
+            <td class="num">${fmt(sum)}</td>
+            <td class="num" style="color:var(--accent-2);background:var(--accent-soft)">${fmt(pay)}</td>
           </tr>
           </tbody>
         </table>
-        <div style="font-size:11px;color:var(--text-3);margin-top:6px;font-family:var(--mono)">* 标记 = 本次应付已手动调整，与 Balance AUD 不同</div>
+      </div>`;
+  };
+
+  const statRow = (label, value, color, note) => `
+    <div style="display:flex;justify-content:space-between;align-items:baseline;padding:11px 16px;border-bottom:1px solid var(--border)">
+      <div style="font-size:13px;color:var(--text-2)">${label}${note ? `<span style="font-size:11px;color:var(--text-3);margin-left:6px">${note}</span>` : ''}</div>
+      <div style="font-size:18px;font-weight:700;color:${color};font-family:var(--mono)">AUD ${fmt(value)}</div>
+    </div>`;
+
+  document.getElementById('reportArea').innerHTML = `
+    <div class="report-card">
+      <div class="report-head">
+        <div class="report-title">付款申请单</div>
+        <div class="report-meta">
+          ${reconDirect ? `直接支付 <strong style="color:var(--warn)">${esc(reconDirect)}</strong>` : ''}
+          ${reconLoan ? ` · 贷款 <strong style="color:var(--ac)">${esc(reconLoan)}</strong>` : ''}
+          · 门店：${esc(S.store)} · ${esc(S.month)}
+          · 生成时间：${new Date().toLocaleString('zh-CN')}
+        </div>
       </div>
 
+      <div class="report-section">
+        <div class="report-section-title">📊 付款汇总</div>
+        <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-lg);overflow:hidden;margin-bottom:14px">
+          ${statRow('① 月度 Statement 账单合计', stmtMonthTotal, 'var(--text)', '本月全部发票 Balance')}
+          ${statRow('② 中间金额（前期贷款本期支付）', midAmount, 'var(--text-2)', '手填')}
+          ${statRow('③ 扣减本月门店贷款', loanPay, 'var(--ac)', reconLoan ? `对账号 ${esc(reconLoan)}` : '未填')}
+          ${statRow('④ 本月应支付金额', directPay, 'var(--accent-2)', reconDirect ? `对账号 ${esc(reconDirect)}` : '未填')}
+          <div style="display:flex;justify-content:space-between;align-items:baseline;padding:16px;background:linear-gradient(135deg,var(--accent-soft),#dbeafe)">
+            <div style="font-size:14px;color:var(--text);font-weight:600">⑤ 剩余未申请支付 <span style="font-size:11px;color:var(--text-3)">① − ② − ③ − ④</span></div>
+            <div style="font-size:24px;font-weight:800;color:${remaining < -0.01 ? 'var(--err)' : 'var(--accent-2)'};font-family:var(--mono)">AUD ${fmt(remaining)}</div>
+          </div>
+        </div>
+      </div>
+
+      ${invTable(directInvoices, '💵 直接支付发票明细', reconDirect)}
+      ${invTable(loanInvoices, '🏦 贷款发票明细', reconLoan)}
+
+      <div style="font-size:11px;color:var(--text-3);margin-top:6px;font-family:var(--mono)">* 标记 = 本次应付已手动调整，与 Balance AUD 不同</div>
       <div style="text-align:right;font-size:11px;color:var(--text-3);margin-top:24px;border-top:1px solid var(--border);padding-top:12px">
         HC Forklift Australia · 供应商对账系统自动生成
       </div>
@@ -2347,36 +2393,48 @@ function expReport() {
   const r = S.currentReport;
   if (!r) { toast('请先生成报告', 'wn'); return; }
   const wb = XLSX.utils.book_new();
+  const toPayOf = (i) => i.to_pay_amount != null ? i.to_pay_amount : i.balance_aud;
 
   // Sheet 1: 汇总
   const summary = [
     ['付款申请单'],
-    ['对账号', r.reconNo],
     ['门店', S.store],
+    ['月份', S.month],
+    ['直接支付对账号', r.reconDirect || '—'],
+    ['贷款对账号', r.reconLoan || '—'],
     ['生成时间', new Date().toLocaleString('zh-CN')],
     [],
-    ['本次申请支付 (AUD)', r.toPay],
-    ['Statement 发票数', r.invoiceList.length],
-    ['账面合计', r.stmtTotal],
+    ['① 月度 Statement 账单合计', r.stmtMonthTotal],
+    ['② 中间金额（前期贷款本期支付）', r.midAmount],
+    ['③ 扣减本月门店贷款', r.loanPay],
+    ['④ 本月应支付金额', r.directPay],
+    ['⑤ 剩余未申请支付', r.remaining],
+    [],
     ['涉及合同', r.poList],
-    ['付款方式', r.paymentMethods],
-    ['合同类别', r.contractTypes],
   ];
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(summary), '汇总');
 
-  // Sheet 2: 发票明细（每张发票一行）
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(
-    r.invoiceList.map(i => ({
-      '发票号': i.invoice_no,
-      '发票日期': i.invoice_date,
-      '到期日': i.due_date,
-      'PO': i.po_short || i.reference,
-      'Invoice Amount': i.invoice_amount,
-      '本次应付': i.to_pay_amount != null ? i.to_pay_amount : i.balance_aud,
-    }))
-  ), '发票明细');
+  // Sheet 2: 直接支付发票
+  if (r.directInvoices.length) {
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(
+      r.directInvoices.map(i => ({
+        '发票号': i.invoice_no, '发票日期': fmtDate(i.invoice_date), '到期日': fmtDate(i.due_date),
+        'PO': i.po_short || i.reference, 'Invoice Amount': i.invoice_amount, '本次应付': toPayOf(i),
+      }))
+    ), '直接支付');
+  }
+  // Sheet 3: 贷款发票
+  if (r.loanInvoices.length) {
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(
+      r.loanInvoices.map(i => ({
+        '发票号': i.invoice_no, '发票日期': fmtDate(i.invoice_date), '到期日': fmtDate(i.due_date),
+        'PO': i.po_short || i.reference, 'Invoice Amount': i.invoice_amount, '本次应付': toPayOf(i),
+      }))
+    ), '贷款');
+  }
 
-  XLSX.writeFile(wb, `付款申请_${r.reconNo}_${S.store}_${today()}.xlsx`);
+  const tag = r.reconDirect || r.reconLoan || 'report';
+  XLSX.writeFile(wb, `付款申请_${tag}_${S.store}_${today()}.xlsx`);
 }
 
 // ════════════════════════════════════════════════════════════
