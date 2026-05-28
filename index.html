@@ -1795,24 +1795,81 @@ async function handleInvoiceZip(input) {
       `· 匹配到 Statement（全部月份）: ${matched.length} 张\n` +
       `· 未匹配（数据库里没有这个发票号）: ${unmatched.length} 张\n\n` +
       `准备将识别到的 PO/VIN/单价/GST/金额 写入对应发票。\n` +
-      `已手填的字段（对账号、付款方式等）会被保留。\n\n` +
+      `已手填的字段（对账号、付款方式等）会被保留。\n` +
+      `若某发票之前识别行数不全，会自动重建补齐（发票级手填字段保留）。\n\n` +
       `是否继续？`
     );
     if (!ok) { toast('已取消', 'wn'); input.value = ''; return; }
 
     showL('写入数据...');
 
-    let updated = 0, inserted = 0, failed = 0;
+    let updated = 0, inserted = 0, failed = 0, rebuilt = 0;
     for (const r of matched) {
       const key = normInv(r.parsed.invoice_no);
       const existRows = stmtByInv[key] || [];
       existRows.sort((a, b) => (a.line_no || 1) - (b.line_no || 1));
       const headInv = existRows[0];
       if (!headInv) continue;
-      // 用匹配到的发票实际所在的月份（跨月匹配关键）
       const targetMonth = headInv.statement_month;
+      const nParsed = r.parsed.lines.length;
+      const nExist = existRows.length;
 
-      for (let i = 0; i < r.parsed.lines.length; i++) {
+      // 情况 A：识别行数 > 现有行数 → 之前识别有缺漏，重建该发票明细
+      //   保留 line_no=1 上的发票级字段（已付/Balance/对账号/付款方式/合同类别/本次应付/月份分类）
+      //   删掉所有现有行，重新按识别结果插入；发票级字段放回第一行
+      if (nParsed > nExist) {
+        try {
+          // 1) 抢救发票级字段
+          const preserved = {
+            invoice_amount: headInv.invoice_amount,
+            payments: headInv.payments,
+            balance_aud: headInv.balance_aud,
+            to_pay_amount: headInv.to_pay_amount,
+            less_amount: headInv.less_amount != null ? headInv.less_amount : r.parsed.less_amount,
+            recon_no: headInv.recon_no,
+            payment_method: headInv.payment_method,
+            contract_type: headInv.contract_type,
+            month_category: headInv.month_category,
+            invoice_date: headInv.invoice_date,
+            due_date: headInv.due_date,
+            reference: headInv.reference,
+            ignored: headInv.ignored,
+          };
+          // 2) 删除该发票所有现有行
+          await fetch(`${SU}/rest/v1/statements_invoices?store=eq.${encodeURIComponent(headInv.store)}&statement_month=eq.${encodeURIComponent(targetMonth)}&invoice_no=eq.${encodeURIComponent(headInv.invoice_no)}`, {
+            method: 'DELETE',
+            headers: { 'apikey': SK, 'Authorization': `Bearer ${SK}` },
+          });
+          // 3) 重新插入 N 行
+          const newRows = r.parsed.lines.map((line, idx) => {
+            const row = {
+              store: headInv.store || S.store,
+              statement_month: targetMonth,
+              invoice_no: headInv.invoice_no,
+              line_no: idx + 1,
+              vin: line.vin,
+              po_short: r.parsed.po_short,
+              so_no: r.parsed.so_no,
+              unit_price: line.unit_price,
+              gst_rate: line.gst_rate,
+              amount_aud: line.amount,
+            };
+            // 发票级字段只放第一行
+            if (idx === 0) Object.assign(row, preserved);
+            return row;
+          });
+          await api('POST', 'statements_invoices', newRows);
+          rebuilt++;
+          inserted += newRows.length;
+        } catch (e) {
+          failed++;
+          console.error('Rebuild invoice failed:', r.parsed.invoice_no, e);
+        }
+        continue;
+      }
+
+      // 情况 B：识别行数 ≤ 现有行数 → 原逻辑（严格保护，只填空）
+      for (let i = 0; i < nParsed; i++) {
         const line = r.parsed.lines[i];
         const targetLineNo = i + 1;
         const exist = existRows[i];
@@ -1824,7 +1881,6 @@ async function handleInvoiceZip(input) {
           if (!exist.gst_rate && line.gst_rate)     patch.gst_rate = line.gst_rate;
           if (exist.amount_aud == null && line.amount != null) patch.amount_aud = line.amount;
           if (exist.line_no == null) patch.line_no = targetLineNo;
-          // Less Amount 写到第一行（发票级字段）
           if (i === 0 && r.parsed.less_amount != null && exist.less_amount == null) patch.less_amount = r.parsed.less_amount;
           if (Object.keys(patch).length > 0) {
             try {
@@ -1835,26 +1891,6 @@ async function handleInvoiceZip(input) {
               console.error('Update line failed:', r.parsed.invoice_no, targetLineNo, e);
             }
           }
-        } else {
-          const newRow = {
-            store: headInv.store || S.store,
-            statement_month: targetMonth,
-            invoice_no: headInv.invoice_no,
-            line_no: targetLineNo,
-            vin: line.vin,
-            po_short: r.parsed.po_short,
-            so_no: r.parsed.so_no,
-            unit_price: line.unit_price,
-            gst_rate: line.gst_rate,
-            amount_aud: line.amount,
-          };
-          try {
-            await api('POST', 'statements_invoices', [newRow]);
-            inserted++;
-          } catch (e) {
-            failed++;
-            console.error('Insert line failed:', r.parsed.invoice_no, targetLineNo, e);
-          }
         }
       }
     }
@@ -1862,8 +1898,9 @@ async function handleInvoiceZip(input) {
     hideL();
     input.value = '';
     const summary = `✅ 更新 ${updated} 行 · ➕ 新增 ${inserted} 行 · ` +
-                    (failed ? `❌ 失败 ${failed} 行` : '') +
-                    ` · 未匹配 ${unmatched.length} 张` +
+                    (rebuilt ? `🔄 重建 ${rebuilt} 张 · ` : '') +
+                    (failed ? `❌ 失败 ${failed} 行 · ` : '') +
+                    `未匹配 ${unmatched.length} 张` +
                     (failResults.length ? ` · 解析失败 ${failResults.length} 张` : '');
     toast('发票数据已写入', failed ? 'wn' : 'ok', summary, 8000);
 
