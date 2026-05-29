@@ -1858,9 +1858,13 @@ async function handleInvoiceZip(input) {
         if (headInv.amount_aud == null && firstLine.amount != null) patch.amount_aud = firstLine.amount;
         if (headInv.less_amount == null && r.parsed.less_amount != null) patch.less_amount = r.parsed.less_amount;
         if (headInv.line_no == null) patch.line_no = 1;
+        // 调试日志：每次写入前打印（v12.9）
+        console.log(`📝 ${r.parsed.invoice_no} 写入第1行 (id=${headInv.id}):`, JSON.stringify(patch), '识别', nParsed, '行, 现有', nExist, '行');
         if (Object.keys(patch).length > 0) {
           try {
             await api('PATCH', 'statements_invoices', patch, `?id=eq.${headInv.id}`);
+            // 同步更新内存中的 headInv，避免并发问题
+            Object.assign(headInv, patch);
             updated++;
           } catch (e) {
             failed++;
@@ -1886,6 +1890,7 @@ async function handleInvoiceZip(input) {
           gst_rate: line.gst_rate || null,
           amount_aud: line.amount != null ? line.amount : null,
         };
+        console.log(`➕ ${r.parsed.invoice_no} 追加行 line_no=${i + 1}:`, JSON.stringify(newRow));
         try {
           await api('POST', 'statements_invoices', [newRow]);
           inserted++;
