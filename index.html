@@ -1636,39 +1636,41 @@ function parseInvoicePdf(text) {
   m = text.match(/Less\s*Amount\s*Credited\s+([\d,]+\.\d{2})/i);
   if (m) result.less_amount = parseFloat(m[1].replace(/,/g, ''));
 
-  // 核心：金额行开块，块内收 VIN，按数量平分金额
-  // 金额行格式：数量 单价 GST% 金额
+  // 核心：累积 VIN（向前），遇到金额行结算成一块
+  // 这样匹配真实 PDF 的"描述+VIN+金额"顺序（VIN 在金额行前面）
   const lineRe = /(\d+(?:\.\d+)?)\s+([\d,]+\.\d{2})\s+(\d+%)\s+([\d,]+\.\d{2})/;
-  // VIN 两种格式：① Serial No: XXX（含无空格 SerialNo:）② N. XXX/MM-YYYY（列表）
-  const serialStdRe = /Serial\s*No\s*[:：]\s*([A-Z0-9]{6,})/g;
+  // VIN 两种格式：① Serial No: XXX  ② N. XXX/MM-YYYY（列表）
+  const serialStdRe = /Serial\s+No\s*[:：]\s*([A-Z0-9]{6,})/g;
   const serialListRe = /^\s*\d+\.\s*([A-Z0-9]{6,})\//;
+  const modelRe = /Model\s*(?:No)?\s*[:：]\s*([A-Z0-9\-]+)/i;
 
   const blocks = [];
-  let cur = null;
+  let curVins = [];      // 累积当前块的 VIN
+  let curModels = [];    // 累积当前块的车型
   for (const ln of text.split('\n')) {
     const am = ln.match(lineRe);
     if (am) {
-      cur = {
+      // 金额行：结算前面累积的 VIN/车型为一块
+      blocks.push({
         qty: parseFloat(am[1]),
         unit_price: parseFloat(am[2].replace(/,/g, '')),
         gst_rate: am[3],
         amount: parseFloat(am[4].replace(/,/g, '')),
-        vins: [],
-        models: [],
-      };
-      blocks.push(cur);
+        vins: curVins,
+        models: curModels,
+      });
+      curVins = [];
+      curModels = [];
       continue;
     }
-    if (cur) {
-      let sm;
-      serialStdRe.lastIndex = 0;
-      while ((sm = serialStdRe.exec(ln)) !== null) cur.vins.push(sm[1]);
-      const lm = ln.match(serialListRe);
-      if (lm) cur.vins.push(lm[1]);
-      // 车型：Model No: XXX 或 Model: XXX（含无空格）
-      const mo = ln.match(/Model\s*(?:No)?\s*[:：]\s*([A-Z0-9\-]+)/i);
-      if (mo) cur.models.push(mo[1]);
-    }
+    // 非金额行：收集 VIN 和车型
+    let sm;
+    serialStdRe.lastIndex = 0;
+    while ((sm = serialStdRe.exec(ln)) !== null) curVins.push(sm[1]);
+    const lm = ln.match(serialListRe);
+    if (lm) curVins.push(lm[1]);
+    const mo = ln.match(modelRe);
+    if (mo) curModels.push(mo[1]);
   }
 
   // 展开：有 VIN 的按数量平分金额；无 VIN 的算配件（合并）
