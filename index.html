@@ -554,7 +554,8 @@ tr.expand-row td {
         <th onclick="srt('due_date')">到期日</th>
         <th class="num" style="border-left:2px solid var(--border)">Unit Price</th>
         <th class="num">GST</th>
-        <th class="num">Amount AUD</th>
+        <th class="num">Amount AUD<br><span style="font-weight:normal;font-size:10px;color:var(--text-3)">(不含GST)</span></th>
+        <th class="num" style="color:var(--accent-2)">含GST金额<br><span style="font-weight:normal;font-size:10px;color:var(--text-3)">(Amount×1.1)</span></th>
         <th class="num" style="border-left:2px solid var(--border)">Invoice Amount</th>
         <th class="num">已付</th>
         <th class="num">Less Amount</th>
@@ -566,7 +567,7 @@ tr.expand-row td {
         <th>操作</th>
         <th>对账号<span style="font-weight:normal;font-size:10px;color:var(--text-3)">（每行独立）</span></th>
       </tr></thead>
-      <tbody id="t1b"><tr><td colspan="19"><div class="empty"><div class="empty-icon">📄</div><div class="empty-text">请先导入 Statement PDF</div></div></td></tr></tbody>
+      <tbody id="t1b"><tr><td colspan="20"><div class="empty"><div class="empty-icon">📄</div><div class="empty-text">请先导入 Statement PDF</div></div></td></tr></tbody>
     </table>
   </div></div>
 </div>
@@ -2086,7 +2087,7 @@ function renderT1() {
   };
 
   if (!groupList.length) {
-    document.getElementById('t1b').innerHTML = '<tr><td colspan="19"><div class="empty"><div class="empty-icon">🔍</div><div class="empty-text">无匹配数据</div></div></td></tr>';
+    document.getElementById('t1b').innerHTML = '<tr><td colspan="20"><div class="empty"><div class="empty-icon">🔍</div><div class="empty-text">无匹配数据</div></div></td></tr>';
     return;
   }
 
@@ -2142,6 +2143,9 @@ function renderT1() {
       const unitCell   = `<td class="ec num" style="border-left:2px solid var(--border);${rowSep}" ondblclick="ecText('${r.id}','unit_price',this,'statements_invoices')">${fmt(r.unit_price)}</td>`;
       const gstCell    = `<td class="ec num" style="${rowSep}" ondblclick="ecText('${r.id}','gst_rate',this,'statements_invoices')">${esc(r.gst_rate) || '—'}</td>`;
       const amountCell = `<td class="ec num" style="font-weight:600;${rowSep}" ondblclick="ecText('${r.id}','amount_aud',this,'statements_invoices')">${fmt(r.amount_aud)}</td>`;
+      // 含 GST 金额 = Amount AUD × 1.1（自动计算，只读显示）
+      const amtGst = r.amount_aud != null ? Number(r.amount_aud) * 1.1 : null;
+      const amountGstCell = `<td class="num" style="color:var(--accent-2);font-weight:600;${rowSep}" title="自动算: Amount AUD × 1.1">${amtGst != null ? fmt(amtGst) : '—'}</td>`;
 
       // 发票级别字段（Invoice Amount, 已付, Balance, 本次应付, 状态, 对账号, 付款方式, 合同类别, 操作）
       const tailCells = isFirst ? `
@@ -2157,7 +2161,7 @@ function renderT1() {
       // 对账号：每行独立（VIN 级），不再 rowspan
       const reconCell = `<td class="ec" style="color:var(--warn);font-family:var(--mono);font-size:12px;${rowSep}" ondblclick="ecText('${r.id}','recon_no',this,'statements_invoices')">${esc(r.recon_no) || '<span style="color:var(--text-3)">双击</span>'}</td>`;
 
-      html.push(`<tr class="${rowCls}">${dateCell}${poCell}${modelCell}${vinCell}${dueCell}${unitCell}${gstCell}${amountCell}${tailCells}${reconCell}</tr>`);
+      html.push(`<tr class="${rowCls}">${dateCell}${poCell}${modelCell}${vinCell}${dueCell}${unitCell}${gstCell}${amountCell}${amountGstCell}${tailCells}${reconCell}</tr>`);
     }
   }
   document.getElementById('t1b').innerHTML = html.join('');
@@ -2622,6 +2626,7 @@ function expT1() {
     'Unit Price': r.unit_price,
     'GST': r.gst_rate,
     'Amount AUD': r.amount_aud,
+    '含GST金额': r.amount_aud != null ? Number((Number(r.amount_aud) * 1.1).toFixed(2)) : null,
     'Invoice Amount': r.invoice_amount,
     '已付': r.payments,
     'Less Amount': r.less_amount,
