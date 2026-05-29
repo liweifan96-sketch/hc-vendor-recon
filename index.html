@@ -561,10 +561,10 @@ tr.expand-row td {
         <th class="num">Balance AUD</th>
         <th class="num" style="background:var(--accent-soft);color:var(--accent-2)">本次应付</th>
         <th>状态分类</th>
-        <th>对账号</th>
         <th>付款方式</th>
         <th>合同类别</th>
         <th>操作</th>
+        <th>对账号<span style="font-weight:normal;font-size:10px;color:var(--text-3)">（每行独立）</span></th>
       </tr></thead>
       <tbody id="t1b"><tr><td colspan="19"><div class="empty"><div class="empty-icon">📄</div><div class="empty-text">请先导入 Statement PDF</div></div></td></tr></tbody>
     </table>
@@ -1787,10 +1787,11 @@ async function handleInvoiceZip(input) {
 
     showL('匹配 Statement 发票...');
 
-    // 跨月匹配：拉该门店【所有月份】的 Statement 发票
+    // 只匹配当前选中月份的 Statement 发票（不跨月）
     const enc = encodeURIComponent(S.store);
+    const monthEnc = encodeURIComponent(S.month);
     const existingStmt = await api('GET', 'statements_invoices', null,
-      `?store=eq.${enc}&select=id,statement_month,invoice_no,line_no,vin,model,po_short,unit_price,gst_rate,amount_aud,less_amount,recon_no,payment_method,contract_type,to_pay_amount&limit=50000`) || [];
+      `?store=eq.${enc}&statement_month=eq.${monthEnc}&select=id,statement_month,invoice_no,line_no,vin,model,po_short,unit_price,gst_rate,amount_aud,less_amount,recon_no,payment_method,contract_type,to_pay_amount&limit=50000`) || [];
     // 按归一化发票号分组（去空格、大写）
     const normInv = (s) => (s || '').replace(/\s/g, '').toUpperCase();
     // 宽松匹配：先精确匹配，再尝试去掉 -N 后缀（如 DJJ-25215-1 → DJJ-25215）
@@ -1852,7 +1853,7 @@ async function handleInvoiceZip(input) {
       existRows.sort((a, b) => (a.line_no || 1) - (b.line_no || 1));
       const headInv = existRows[0];
       if (!headInv) continue;
-      const targetMonth = headInv.statement_month;
+      const targetMonth = S.month;  // 永远写到当前选中月，不再跨月匹配
       const nParsed = r.parsed.lines.length;
       const nExist = existRows.length;
 
@@ -2108,6 +2109,21 @@ function renderT1() {
       const isLast = idx === group.length - 1;
       const rowSep = !isLast ? 'border-bottom:1px dashed var(--border)' : '';
 
+      // 金额核对：VIN 总金额 含 GST = sum(amount_aud) × 1.1，跟 Invoice Amount 对比
+      let amtMismatch = '';
+      if (isFirst) {
+        const vinSum = group.reduce((s, x) => s + (Number(x.amount_aud) || 0), 0);
+        const vinSumWithGst = vinSum * 1.1;
+        const invAmt = Number(r.invoice_amount) || 0;
+        const lessAmt = Number(r.less_amount) || 0;
+        // 期望：Subtotal + GST - Less = Invoice Amount - Less = Balance
+        // 简化：vinSum × 1.1 应等于 invoice_amount
+        const diff = Math.abs(vinSumWithGst - invAmt);
+        if (invAmt > 0 && vinSum > 0 && diff > 1) {
+          amtMismatch = ` <span class="badge b-er" style="font-size:10px;cursor:help" title="VIN明细合计(含GST)=${fmt(vinSumWithGst)}, Invoice Amount=${fmt(invAmt)}, 差${fmt(diff)}">⚠️ 不符</span>`;
+        }
+      }
+
       // 头部 8 列（发票日期、发票号、PO、VIN、到期日、Unit Price、GST、Amount）
       // 注意：PO/VIN/Unit Price/GST/Amount 是每行不同的，发票级别（日期、发票号、到期日）用 rowspan
       const dateCell = isFirst ? `
@@ -2129,18 +2145,19 @@ function renderT1() {
 
       // 发票级别字段（Invoice Amount, 已付, Balance, 本次应付, 状态, 对账号, 付款方式, 合同类别, 操作）
       const tailCells = isFirst ? `
-        <td class="ec num" style="border-left:2px solid var(--border);vertical-align:top" rowspan="${span}" ondblclick="ecText('${r.id}','invoice_amount',this,'statements_invoices')">${fmt(r.invoice_amount)}</td>
+        <td class="ec num" style="border-left:2px solid var(--border);vertical-align:top" rowspan="${span}" ondblclick="ecText('${r.id}','invoice_amount',this,'statements_invoices')">${fmt(r.invoice_amount)}${amtMismatch}</td>
         <td class="ec num" style="color:var(--ok);vertical-align:top" rowspan="${span}" ondblclick="ecText('${r.id}','payments',this,'statements_invoices')">${r.payments > 0 ? fmt(r.payments) : '—'}</td>
         <td class="ec num" style="color:var(--warn);vertical-align:top" rowspan="${span}" title="抵扣 Less Amount Credited" ondblclick="ecText('${r.id}','less_amount',this,'statements_invoices')">${r.less_amount > 0 ? fmt(r.less_amount) : '<span style="color:var(--text-3)">—</span>'}</td>
         <td class="ec num" style="font-weight:700;vertical-align:top" rowspan="${span}" ondblclick="ecText('${r.id}','balance_aud',this,'statements_invoices')">${fmt(r.balance_aud)}</td>
         <td class="ec num" style="background:var(--accent-soft);font-weight:700;color:${toPayIsCustom ? 'var(--warn)' : 'var(--accent-2)'};vertical-align:top" rowspan="${span}" title="${toPayIsCustom ? '已手动调整' : '默认 = Balance AUD'}" ondblclick="ecText('${r.id}','to_pay_amount',this,'statements_invoices')">${fmt(toPayVal)}${toPayIsCustom ? ' *' : ''}</td>
         <td style="vertical-align:top" rowspan="${span}">${cat[r.month_category] || '—'}</td>
-        <td class="ec" style="color:var(--warn);font-family:var(--mono);font-size:12px;vertical-align:top" rowspan="${span}" ondblclick="ecText('${r.id}','recon_no',this,'statements_invoices')">${esc(r.recon_no) || '<span style="color:var(--text-3)">双击设置</span>'}</td>
         <td class="ec" style="vertical-align:top" rowspan="${span}" ondblclick="ecSel('${r.id}','payment_method',this,'statements_invoices',['直接支付','贷款'])">${pm || '<span style="color:var(--text-3);font-size:12px">双击设置</span>'}</td>
         <td class="ec" style="vertical-align:top" rowspan="${span}" ondblclick="ecSel('${r.id}','contract_type',this,'statements_invoices',['确认合同','自有'])">${ct || '<span style="color:var(--text-3);font-size:12px">双击设置</span>'}</td>
         <td style="vertical-align:top" rowspan="${span}"><button class="btn btn-sec btn-sm" style="color:${r.ignored ? 'var(--ok)' : 'var(--err)'}" onclick="togIgnGroup('${r.invoice_no}',${r.ignored})">${r.ignored ? '↩ 恢复' : '忽略'}</button><button class="btn btn-sec btn-sm" style="color:var(--accent);margin-top:4px" onclick="addInvoiceLine('${r.invoice_no}')" title="给这张发票加一行">＋插行</button></td>` : '';
+      // 对账号：每行独立（VIN 级），不再 rowspan
+      const reconCell = `<td class="ec" style="color:var(--warn);font-family:var(--mono);font-size:12px;${rowSep}" ondblclick="ecText('${r.id}','recon_no',this,'statements_invoices')">${esc(r.recon_no) || '<span style="color:var(--text-3)">双击</span>'}</td>`;
 
-      html.push(`<tr class="${rowCls}">${dateCell}${poCell}${modelCell}${vinCell}${dueCell}${unitCell}${gstCell}${amountCell}${tailCells}</tr>`);
+      html.push(`<tr class="${rowCls}">${dateCell}${poCell}${modelCell}${vinCell}${dueCell}${unitCell}${gstCell}${amountCell}${tailCells}${reconCell}</tr>`);
     }
   }
   document.getElementById('t1b').innerHTML = html.join('');
@@ -2381,7 +2398,8 @@ function genReport() {
 
   if (!reconDirect && !reconLoan) { toast('请至少输入一个对账号', 'wn'); return; }
 
-  // 辅助：按对账号取发票（去重到发票级，每发票取 line_no=1 代表）
+  // 辅助：按对账号取发票（去重到发票级，每发票取该对账号匹配的第一个 VIN 行；金额用 to_pay_amount 整张发票合计）
+  // 注意：如果一张发票里多个 VIN 设了不同对账号，金额会重复计算 — 改用 VIN 行金额×1.1 累加更准
   const getInvoices = (recon) => {
     if (!recon) return [];
     const rows = S.stmtInvoices.filter(r => r.recon_no === recon && !r.ignored);
@@ -2392,7 +2410,21 @@ function genReport() {
     }
     return Object.values(byInv).map(g => {
       g.sort((a, b) => (a.line_no || 1) - (b.line_no || 1));
-      return g[0];
+      // 每张发票，统计该对账号匹配的 VIN 行数和金额（× 1.1 含 GST）
+      const matchedLines = g.length;
+      const totalLines = (S.stmtInvoices.filter(r => r.invoice_no === g[0].invoice_no && r.statement_month === g[0].statement_month && r.store === g[0].store) || []).length;
+      const isPartial = matchedLines < totalLines;
+      const head = g[0];
+      // 若是部分匹配（同发票不同 VIN 不同对账号），按 VIN 行金额 × 1.1 计
+      if (isPartial) {
+        const vinAmt = g.reduce((s, x) => s + (Number(x.amount_aud) || 0), 0) * 1.1;
+        head._toPayCalc = vinAmt;
+        head._partial = `${matchedLines}/${totalLines}`;
+      } else {
+        head._toPayCalc = head.to_pay_amount != null ? Number(head.to_pay_amount) : Number(head.balance_aud || 0);
+        head._partial = null;
+      }
+      return head;
     }).sort((a, b) => (a.invoice_no || '').localeCompare(b.invoice_no || ''));
   };
 
@@ -2411,8 +2443,8 @@ function genReport() {
     return;
   }
 
-  // 本次应付合计
-  const sumToPay = (list) => list.reduce((s, i) => s + (i.to_pay_amount != null ? Number(i.to_pay_amount) : Number(i.balance_aud || 0)), 0);
+  // 本次应付合计（用 _toPayCalc，部分匹配时按 VIN 行金额×1.1 算）
+  const sumToPay = (list) => list.reduce((s, i) => s + (i._toPayCalc != null ? i._toPayCalc : (i.to_pay_amount != null ? Number(i.to_pay_amount) : Number(i.balance_aud || 0))), 0);
   const directPay = sumToPay(directInvoices);   // ④ 本月应支付（直接支付对账号）
   const loanPay = sumToPay(loanInvoices);       // ③ 扣减本月门店贷款（贷款对账号）
 
