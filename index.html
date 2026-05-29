@@ -1793,6 +1793,18 @@ async function handleInvoiceZip(input) {
       `?store=eq.${enc}&select=id,statement_month,invoice_no,line_no,vin,model,po_short,unit_price,gst_rate,amount_aud,less_amount,recon_no,payment_method,contract_type,to_pay_amount&limit=50000`) || [];
     // 按归一化发票号分组（去空格、大写）
     const normInv = (s) => (s || '').replace(/\s/g, '').toUpperCase();
+    // 宽松匹配：先精确匹配，再尝试去掉 -N 后缀（如 DJJ-25215-1 → DJJ-25215）
+    const matchKey = (invNo) => {
+      const k = normInv(invNo);
+      if (stmtByInv[k]) return k;
+      // 尝试去掉最后的 -数字 后缀
+      const stripped = k.replace(/-\d+$/, '');
+      if (stripped !== k && stmtByInv[stripped]) {
+        console.log(`🔍 宽松匹配: ${invNo} → ${stripped}`);
+        return stripped;
+      }
+      return null;
+    };
     const stmtByInv = {};
     for (const r of existingStmt) {
       const key = normInv(r.invoice_no);
@@ -1800,11 +1812,13 @@ async function handleInvoiceZip(input) {
       stmtByInv[key].push(r);
     }
 
-    // 分类（用归一化发票号匹配）
+    // 分类（用归一化发票号匹配，支持宽松匹配）
     const okResults = results.filter(r => r.ok);
     const failResults = results.filter(r => !r.ok);
-    const matched = okResults.filter(r => stmtByInv[normInv(r.parsed.invoice_no)]);
-    const unmatched = okResults.filter(r => !stmtByInv[normInv(r.parsed.invoice_no)]);
+    // 给每个 ok 结果附上匹配到的 key
+    for (const r of okResults) r._matchKey = matchKey(r.parsed.invoice_no);
+    const matched = okResults.filter(r => r._matchKey);
+    const unmatched = okResults.filter(r => !r._matchKey);
 
     if (!matched.length) {
       hideL();
@@ -1833,7 +1847,7 @@ async function handleInvoiceZip(input) {
 
     let updated = 0, inserted = 0, failed = 0, rebuilt = 0;
     for (const r of matched) {
-      const key = normInv(r.parsed.invoice_no);
+      const key = r._matchKey || normInv(r.parsed.invoice_no);
       const existRows = stmtByInv[key] || [];
       existRows.sort((a, b) => (a.line_no || 1) - (b.line_no || 1));
       const headInv = existRows[0];
@@ -1842,10 +1856,10 @@ async function handleInvoiceZip(input) {
       const nParsed = r.parsed.lines.length;
       const nExist = existRows.length;
 
-      // 简单逻辑：第1行用 PATCH 填补识别到的字段（不动手填）；多出的行（line_no 2,3,4...）用 INSERT 追加
-      // 不删除、不重建，完全保留 Statement 原行
+      // v12.11 策略：PATCH 现有的每一行（强制覆盖识别字段）+ INSERT 多出的行
+      // 完全不依赖 DELETE，避免 DELETE 静默失败的问题
 
-      // 1) 更新第 1 行（PATCH）：填补 VIN/车型/单价/金额/GST/Less Amount（仅当原本为空时）
+      // 1) 第 1 行：PATCH（手填字段保留，识别字段填补）
       const firstLine = r.parsed.lines[0];
       if (firstLine) {
         const patch = {};
@@ -1871,66 +1885,64 @@ async function handleInvoiceZip(input) {
         }
       }
 
-      // 2) 多 VIN 处理：识别 > 1 行 时，先删 line_no >= 2 的所有残留行，再按识别结果追加
-      //    这样不管现有有几个残留（之前错误识别留下的），都能正确重建
-      if (nParsed > 1) {
-        // 删 line_no >= 2 的残留行
+      // 2) 第 2..min(nParsed,nExist) 行：PATCH 现有行，强制覆盖识别字段（不再"仅补空"，避免之前错误数据残留）
+      for (let i = 1; i < Math.min(nParsed, nExist); i++) {
+        const line = r.parsed.lines[i];
+        const exist = existRows[i];
+        const patch = {
+          vin: line.vin || null,
+          model: line.model || null,
+          po_short: r.parsed.po_short || null,
+          unit_price: line.unit_price != null ? line.unit_price : null,
+          gst_rate: line.gst_rate || null,
+          amount_aud: line.amount != null ? line.amount : null,
+        };
+        if (exist.line_no == null) patch.line_no = i + 1;
+        console.log(`🔄 ${r.parsed.invoice_no} 覆盖行 line_no=${i + 1} (id=${exist.id}): VIN=${line.vin}`);
         try {
-          await api('DELETE', 'statements_invoices', null,
-            `?store=eq.${encodeURIComponent(headInv.store)}&statement_month=eq.${encodeURIComponent(targetMonth)}&invoice_no=eq.${encodeURIComponent(headInv.invoice_no)}&line_no=gte.2`);
-          console.log(`🗑️ ${r.parsed.invoice_no} 已清残留 line_no>=2`);
+          await api('PATCH', 'statements_invoices', patch, `?id=eq.${exist.id}`);
+          updated++;
         } catch (e) {
-          console.error('Clean residual failed:', r.parsed.invoice_no, e);
-        }
-        // 追加 line_no 2..N
-        for (let i = 1; i < nParsed; i++) {
-          const line = r.parsed.lines[i];
-          const newRow = {
-            store: headInv.store || S.store,
-            statement_month: targetMonth,
-            invoice_no: headInv.invoice_no,
-            line_no: i + 1,
-            vin: line.vin || null,
-            model: line.model || null,
-            po_short: r.parsed.po_short || null,
-            so_no: r.parsed.so_no || null,
-            unit_price: line.unit_price != null ? line.unit_price : null,
-            gst_rate: line.gst_rate || null,
-            amount_aud: line.amount != null ? line.amount : null,
-          };
-          console.log(`➕ ${r.parsed.invoice_no} 追加行 line_no=${i + 1}: VIN=${line.vin}`);
-          try {
-            await api('POST', 'statements_invoices', [newRow]);
-            inserted++;
-          } catch (e) {
-            failed++;
-            console.error('Insert extra line failed:', r.parsed.invoice_no, i + 1, e);
-          }
+          failed++;
+          console.error('Overwrite line failed:', r.parsed.invoice_no, i + 1, e);
         }
       }
 
-      // 情况 B：对 line_no 2..min(nParsed,nExist) 用 PATCH 填补（手动插过的行）
-      for (let i = 1; i < Math.min(nParsed, nExist); i++) {
+      // 3) 多出的行（line_no = nExist+1, ..., nParsed）：INSERT 追加
+      for (let i = nExist; i < nParsed; i++) {
         const line = r.parsed.lines[i];
-        const targetLineNo = i + 1;
-        const exist = existRows[i];
-        if (exist) {
-          const patch = {};
-          if (!exist.vin && line.vin)               patch.vin = line.vin;
-          if (!exist.model && line.model)           patch.model = line.model;
-          if (!exist.po_short && r.parsed.po_short) patch.po_short = r.parsed.po_short;
-          if (!exist.unit_price && line.unit_price != null) patch.unit_price = line.unit_price;
-          if (!exist.gst_rate && line.gst_rate)     patch.gst_rate = line.gst_rate;
-          if (exist.amount_aud == null && line.amount != null) patch.amount_aud = line.amount;
-          if (exist.line_no == null) patch.line_no = targetLineNo;
-          if (Object.keys(patch).length > 0) {
-            try {
-              await api('PATCH', 'statements_invoices', patch, `?id=eq.${exist.id}`);
-              updated++;
-            } catch (e) {
-              failed++;
-              console.error('Update line failed:', r.parsed.invoice_no, targetLineNo, e);
-            }
+        const newRow = {
+          store: headInv.store || S.store,
+          statement_month: targetMonth,
+          invoice_no: headInv.invoice_no,
+          line_no: i + 1,
+          vin: line.vin || null,
+          model: line.model || null,
+          po_short: r.parsed.po_short || null,
+          so_no: r.parsed.so_no || null,
+          unit_price: line.unit_price != null ? line.unit_price : null,
+          gst_rate: line.gst_rate || null,
+          amount_aud: line.amount != null ? line.amount : null,
+        };
+        console.log(`➕ ${r.parsed.invoice_no} 追加行 line_no=${i + 1}: VIN=${line.vin}`);
+        try {
+          await api('POST', 'statements_invoices', [newRow]);
+          inserted++;
+        } catch (e) {
+          failed++;
+          console.error('Insert extra line failed:', r.parsed.invoice_no, i + 1, e);
+        }
+      }
+
+      // 4) 现有行多于识别行（手动插过行的情况），删除多余的 line_no
+      if (nExist > nParsed) {
+        for (let i = nParsed; i < nExist; i++) {
+          const exist = existRows[i];
+          console.log(`🗑️ ${r.parsed.invoice_no} 删多余行 line_no=${exist.line_no} (id=${exist.id})`);
+          try {
+            await api('DELETE', 'statements_invoices', null, `?id=eq.${exist.id}`);
+          } catch (e) {
+            console.error('Delete excess line failed:', r.parsed.invoice_no, exist.line_no, e);
           }
         }
       }
