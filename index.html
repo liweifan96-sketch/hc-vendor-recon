@@ -1886,7 +1886,10 @@ async function handleInvoiceZip(input) {
             reference:      idx === 0 ? preserved.reference : null,
             ignored:        idx === 0 ? (preserved.ignored || false) : false,
           }));
-          await api('POST', 'statements_invoices', newRows);
+          // 逐行单独 POST（避开 PGRST102 "All object keys must match" 批量校验）
+          for (const row of newRows) {
+            await api('POST', 'statements_invoices', [row]);
+          }
           rebuilt++;
           inserted += newRows.length;
         } catch (e) {
