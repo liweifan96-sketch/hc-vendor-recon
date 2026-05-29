@@ -1831,75 +1831,61 @@ async function handleInvoiceZip(input) {
       const nParsed = r.parsed.lines.length;
       const nExist = existRows.length;
 
-      // 情况 A：识别行数 > 现有行数 → 之前识别有缺漏，重建该发票明细
-      //   保留 line_no=1 上的发票级字段（已付/Balance/对账号/付款方式/合同类别/本次应付/月份分类）
-      //   删掉所有现有行，重新按识别结果插入；发票级字段放回第一行
-      if (nParsed > nExist) {
-        try {
-          // 1) 抢救发票级字段
-          const preserved = {
-            invoice_amount: headInv.invoice_amount,
-            payments: headInv.payments,
-            balance_aud: headInv.balance_aud,
-            to_pay_amount: headInv.to_pay_amount,
-            less_amount: headInv.less_amount != null ? headInv.less_amount : r.parsed.less_amount,
-            recon_no: headInv.recon_no,
-            payment_method: headInv.payment_method,
-            contract_type: headInv.contract_type,
-            month_category: headInv.month_category,
-            invoice_date: headInv.invoice_date,
-            due_date: headInv.due_date,
-            reference: headInv.reference,
-            ignored: headInv.ignored,
-          };
-          // 2) 删除该发票所有现有行
-          // 2) 删除该发票所有现有行（用 api 函数，带正确 headers + 错误检查）
-          await api('DELETE', 'statements_invoices', null,
-            `?store=eq.${encodeURIComponent(headInv.store)}&statement_month=eq.${encodeURIComponent(targetMonth)}&invoice_no=eq.${encodeURIComponent(headInv.invoice_no)}`);
-          // 3) 重新插入 N 行（所有行 key 必须完全一致，否则 PostgREST 报 PGRST102）
-          //    发票级字段只在第一行有值，其他行填 null
-          const newRows = r.parsed.lines.map((line, idx) => ({
-            store: headInv.store || S.store,
-            statement_month: targetMonth,
-            invoice_no: headInv.invoice_no,
-            line_no: idx + 1,
-            vin: line.vin || null,
-            model: line.model || null,
-            po_short: r.parsed.po_short || null,
-            so_no: r.parsed.so_no || null,
-            unit_price: line.unit_price != null ? line.unit_price : null,
-            gst_rate: line.gst_rate || null,
-            amount_aud: line.amount != null ? line.amount : null,
-            // 发票级字段：只第一行有值，其余 null（保证所有行 key 一致）
-            invoice_amount: idx === 0 ? preserved.invoice_amount : null,
-            payments:       idx === 0 ? preserved.payments : null,
-            balance_aud:    idx === 0 ? preserved.balance_aud : null,
-            to_pay_amount:  idx === 0 ? preserved.to_pay_amount : null,
-            less_amount:    idx === 0 ? preserved.less_amount : null,
-            recon_no:       idx === 0 ? preserved.recon_no : null,
-            payment_method: idx === 0 ? preserved.payment_method : null,
-            contract_type:  idx === 0 ? preserved.contract_type : null,
-            month_category: idx === 0 ? preserved.month_category : null,
-            invoice_date:   idx === 0 ? preserved.invoice_date : null,
-            due_date:       idx === 0 ? preserved.due_date : null,
-            reference:      idx === 0 ? preserved.reference : null,
-            ignored:        idx === 0 ? (preserved.ignored || false) : false,
-          }));
-          // 逐行单独 POST（避开 PGRST102 "All object keys must match" 批量校验）
-          for (const row of newRows) {
-            await api('POST', 'statements_invoices', [row]);
+      // 简单逻辑：第1行用 PATCH 填补识别到的字段（不动手填）；多出的行（line_no 2,3,4...）用 INSERT 追加
+      // 不删除、不重建，完全保留 Statement 原行
+
+      // 1) 更新第 1 行（PATCH）：填补 VIN/车型/单价/金额/GST/Less Amount（仅当原本为空时）
+      const firstLine = r.parsed.lines[0];
+      if (firstLine) {
+        const patch = {};
+        if (!headInv.vin && firstLine.vin)               patch.vin = firstLine.vin;
+        if (!headInv.model && firstLine.model)           patch.model = firstLine.model;
+        if (!headInv.po_short && r.parsed.po_short)      patch.po_short = r.parsed.po_short;
+        if (!headInv.so_no && r.parsed.so_no)            patch.so_no = r.parsed.so_no;
+        if (headInv.unit_price == null && firstLine.unit_price != null) patch.unit_price = firstLine.unit_price;
+        if (!headInv.gst_rate && firstLine.gst_rate)     patch.gst_rate = firstLine.gst_rate;
+        if (headInv.amount_aud == null && firstLine.amount != null) patch.amount_aud = firstLine.amount;
+        if (headInv.less_amount == null && r.parsed.less_amount != null) patch.less_amount = r.parsed.less_amount;
+        if (headInv.line_no == null) patch.line_no = 1;
+        if (Object.keys(patch).length > 0) {
+          try {
+            await api('PATCH', 'statements_invoices', patch, `?id=eq.${headInv.id}`);
+            updated++;
+          } catch (e) {
+            failed++;
+            console.error('Update line 1 failed:', r.parsed.invoice_no, e);
           }
-          rebuilt++;
-          inserted += newRows.length;
-        } catch (e) {
-          failed++;
-          console.error('Rebuild invoice failed:', r.parsed.invoice_no, e);
         }
-        continue;
       }
 
-      // 情况 B：识别行数 ≤ 现有行数 → 原逻辑（严格保护，只填空）
-      for (let i = 0; i < nParsed; i++) {
+      // 2) 追加多出的行（line_no = nExist+1, nExist+2, ...）—— 只插识别到的新行，不动现有行
+      //    例如：Statement 已有 1 行 (line_no=1)，识别出 6 行 → 追加 5 行 (line_no=2~6)
+      for (let i = nExist; i < nParsed; i++) {
+        const line = r.parsed.lines[i];
+        const newRow = {
+          store: headInv.store || S.store,
+          statement_month: targetMonth,
+          invoice_no: headInv.invoice_no,
+          line_no: i + 1,
+          vin: line.vin || null,
+          model: line.model || null,
+          po_short: r.parsed.po_short || null,
+          so_no: r.parsed.so_no || null,
+          unit_price: line.unit_price != null ? line.unit_price : null,
+          gst_rate: line.gst_rate || null,
+          amount_aud: line.amount != null ? line.amount : null,
+        };
+        try {
+          await api('POST', 'statements_invoices', [newRow]);
+          inserted++;
+        } catch (e) {
+          failed++;
+          console.error('Insert extra line failed:', r.parsed.invoice_no, i + 1, e);
+        }
+      }
+
+      // 情况 B：对 line_no 2..min(nParsed,nExist) 用 PATCH 填补（手动插过的行）
+      for (let i = 1; i < Math.min(nParsed, nExist); i++) {
         const line = r.parsed.lines[i];
         const targetLineNo = i + 1;
         const exist = existRows[i];
@@ -1912,7 +1898,6 @@ async function handleInvoiceZip(input) {
           if (!exist.gst_rate && line.gst_rate)     patch.gst_rate = line.gst_rate;
           if (exist.amount_aud == null && line.amount != null) patch.amount_aud = line.amount;
           if (exist.line_no == null) patch.line_no = targetLineNo;
-          if (i === 0 && r.parsed.less_amount != null && exist.less_amount == null) patch.less_amount = r.parsed.less_amount;
           if (Object.keys(patch).length > 0) {
             try {
               await api('PATCH', 'statements_invoices', patch, `?id=eq.${exist.id}`);
