@@ -1858,12 +1858,10 @@ async function handleInvoiceZip(input) {
         if (headInv.amount_aud == null && firstLine.amount != null) patch.amount_aud = firstLine.amount;
         if (headInv.less_amount == null && r.parsed.less_amount != null) patch.less_amount = r.parsed.less_amount;
         if (headInv.line_no == null) patch.line_no = 1;
-        // 调试日志：每次写入前打印（v12.9）
         console.log(`📝 ${r.parsed.invoice_no} 写入第1行 (id=${headInv.id}):`, JSON.stringify(patch), '识别', nParsed, '行, 现有', nExist, '行');
         if (Object.keys(patch).length > 0) {
           try {
             await api('PATCH', 'statements_invoices', patch, `?id=eq.${headInv.id}`);
-            // 同步更新内存中的 headInv，避免并发问题
             Object.assign(headInv, patch);
             updated++;
           } catch (e) {
@@ -1873,30 +1871,41 @@ async function handleInvoiceZip(input) {
         }
       }
 
-      // 2) 追加多出的行（line_no = nExist+1, nExist+2, ...）—— 只插识别到的新行，不动现有行
-      //    例如：Statement 已有 1 行 (line_no=1)，识别出 6 行 → 追加 5 行 (line_no=2~6)
-      for (let i = nExist; i < nParsed; i++) {
-        const line = r.parsed.lines[i];
-        const newRow = {
-          store: headInv.store || S.store,
-          statement_month: targetMonth,
-          invoice_no: headInv.invoice_no,
-          line_no: i + 1,
-          vin: line.vin || null,
-          model: line.model || null,
-          po_short: r.parsed.po_short || null,
-          so_no: r.parsed.so_no || null,
-          unit_price: line.unit_price != null ? line.unit_price : null,
-          gst_rate: line.gst_rate || null,
-          amount_aud: line.amount != null ? line.amount : null,
-        };
-        console.log(`➕ ${r.parsed.invoice_no} 追加行 line_no=${i + 1}:`, JSON.stringify(newRow));
+      // 2) 多 VIN 处理：识别 > 1 行 时，先删 line_no >= 2 的所有残留行，再按识别结果追加
+      //    这样不管现有有几个残留（之前错误识别留下的），都能正确重建
+      if (nParsed > 1) {
+        // 删 line_no >= 2 的残留行
         try {
-          await api('POST', 'statements_invoices', [newRow]);
-          inserted++;
+          await api('DELETE', 'statements_invoices', null,
+            `?store=eq.${encodeURIComponent(headInv.store)}&statement_month=eq.${encodeURIComponent(targetMonth)}&invoice_no=eq.${encodeURIComponent(headInv.invoice_no)}&line_no=gte.2`);
+          console.log(`🗑️ ${r.parsed.invoice_no} 已清残留 line_no>=2`);
         } catch (e) {
-          failed++;
-          console.error('Insert extra line failed:', r.parsed.invoice_no, i + 1, e);
+          console.error('Clean residual failed:', r.parsed.invoice_no, e);
+        }
+        // 追加 line_no 2..N
+        for (let i = 1; i < nParsed; i++) {
+          const line = r.parsed.lines[i];
+          const newRow = {
+            store: headInv.store || S.store,
+            statement_month: targetMonth,
+            invoice_no: headInv.invoice_no,
+            line_no: i + 1,
+            vin: line.vin || null,
+            model: line.model || null,
+            po_short: r.parsed.po_short || null,
+            so_no: r.parsed.so_no || null,
+            unit_price: line.unit_price != null ? line.unit_price : null,
+            gst_rate: line.gst_rate || null,
+            amount_aud: line.amount != null ? line.amount : null,
+          };
+          console.log(`➕ ${r.parsed.invoice_no} 追加行 line_no=${i + 1}: VIN=${line.vin}`);
+          try {
+            await api('POST', 'statements_invoices', [newRow]);
+            inserted++;
+          } catch (e) {
+            failed++;
+            console.error('Insert extra line failed:', r.parsed.invoice_no, i + 1, e);
+          }
         }
       }
 
