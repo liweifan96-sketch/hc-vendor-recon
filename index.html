@@ -514,7 +514,7 @@ tr.expand-row td {
   </div>
 
   <div class="stat-row">
-    <div class="stat-card bl"><div class="stat-label">本次应付 AUD</div><div class="stat-value" id="s1">—</div></div>
+    <div class="stat-card bl"><div class="stat-label">账单总额 AUD</div><div class="stat-value" id="s1">—</div></div>
     <div class="stat-card am"><div class="stat-label">已逾期</div><div class="stat-value" id="s2">—</div></div>
     <div class="stat-card"><div class="stat-label">发票总数</div><div class="stat-value" id="s3">—</div></div>
     <div class="stat-card gn"><div class="stat-label">本月新增</div><div class="stat-value" id="s4">—</div></div>
@@ -2024,11 +2024,9 @@ function setM(m, el) {
 
 function updStats() {
   const cur = S.stmtInvoices.filter(r => r.statement_month === S.month && !r.ignored);
-  // 本次应付优先用 to_pay_amount；为 null 时回退到 balance_aud
-  const total = cur.reduce((s, r) => {
-    const v = r.to_pay_amount != null ? Number(r.to_pay_amount) : Number(r.balance_aud || 0);
-    return s + v;
-  }, 0);
+  // 账单总额 = 当月全部发票 Balance AUD 合计（= PDF 的 BALANCE DUE AUD；与手改的本次应付无关）
+  // Balance 只在抬头行，其余 VIN 行为空(=0)，直接累加即各发票 Balance 之和
+  const total = cur.reduce((s, r) => s + Number(r.balance_aud || 0), 0);
   const now = new Date();
   const ov = cur.filter(r => { const d = parseDue(r.due_date); return d && d < now && r.balance_aud > 0; });
   document.getElementById('s1').textContent = fmt(total);
