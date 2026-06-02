@@ -2430,38 +2430,47 @@ function genReport() {
     }
     return Object.values(byInv).map(g => {
       g.sort((a, b) => (a.line_no || 1) - (b.line_no || 1));
-      // 每张发票，统计该对账号匹配的 VIN 行数
+      // 该发票的全部行（用于判断是否抬头行、总行数）
+      const allRows = S.stmtInvoices.filter(r => r.invoice_no === g[0].invoice_no && r.statement_month === g[0].statement_month && r.store === g[0].store);
       const matchedLines = g.length;
-      const totalLines = (S.stmtInvoices.filter(r => r.invoice_no === g[0].invoice_no && r.statement_month === g[0].statement_month && r.store === g[0].store) || []).length;
+      const totalLines = allRows.length || g.length;
       const isPartial = matchedLines < totalLines;
-      const head = g[0];
-      head._partial = isPartial ? `${matchedLines}/${totalLines}` : null;
+      const head = g[0];   // 报表中代表该发票的行
 
-      const bal = Number(head.balance_aud || 0);
-      // 判断用户是否已"逐行设置"本次应付：抬头行被改成≠Balance，或任一非抬头 VIN 行单独设了本次应付
-      const headCustom = head.to_pay_amount != null && Math.abs(Number(head.to_pay_amount) - bal) > 0.01;
-      const othersHaveToPay = g.slice(1).some(x => x.to_pay_amount != null);
-      const perRow = headCustom || othersHaveToPay;
+      // 真正的发票抬头行（line_no=1，承载 Balance / 发票级本次应付）
+      const headRow = allRows.find(x => (x.line_no || 1) === 1)
+                   || [...allRows].sort((a, b) => (a.line_no || 1) - (b.line_no || 1))[0]
+                   || head;
+      const headLn = headRow.line_no || 1;
+      const bal = Number(headRow.balance_aud || 0);
 
-      // 单行本次应付：抬头行的"默认值"= 整张发票 Balance（不能当作单个 VIN），逐行模式下回退到该行含GST金额
-      const lineToPay = (x, isHead) => {
-        if (x.to_pay_amount != null && !(isHead && Math.abs(Number(x.to_pay_amount) - bal) < 0.01))
+      // 抬头行是否在本对账号匹配到的行内
+      const headInGroup = g.some(x => (x.line_no || 1) === headLn);
+      // 抬头本次应付是否被改过（≠Balance）；非抬头 VIN 行是否单独设了本次应付
+      const headCustom = headRow.to_pay_amount != null && Math.abs(Number(headRow.to_pay_amount) - bal) > 0.01;
+      const anyVinCustom = g.some(x => x.to_pay_amount != null && (x.line_no || 1) !== headLn);
+
+      // 逐行明细模式：对账号挂在单个/部分 VIN 行（抬头不在匹配组内），或用户做过逐 VIN 金额拆分
+      const perRow = !headInGroup || headCustom || anyVinCustom;
+
+      // 单行本次应付：抬头行的"默认值"= 整张发票 Balance，逐行模式下回退到该行含GST金额
+      const lineToPay = (x) => {
+        const isHeadRow = (x.line_no || 1) === headLn;
+        if (x.to_pay_amount != null && !(isHeadRow && Math.abs(Number(x.to_pay_amount) - bal) < 0.01))
           return Number(x.to_pay_amount);
         return (Number(x.amount_aud) || 0) * 1.1;   // 未单独设置 → 该行含GST金额
       };
 
       if (perRow) {
-        // 用户已逐行设置 → 合计该对账号匹配到的每个 VIN 行的本次应付
-        head._toPayCalc = g.reduce((s, x, idx) => s + lineToPay(x, idx === 0), 0);
+        // 逐行：合计该对账号匹配到的每个 VIN 行的本次应付
+        head._toPayCalc = g.reduce((s, x) => s + lineToPay(x), 0);
         head._isCustom = true;
-      } else if (isPartial) {
-        // 未逐行设置，但只匹配了部分 VIN → 按匹配行含GST金额合计
-        head._toPayCalc = g.reduce((s, x) => s + (Number(x.amount_aud) || 0) * 1.1, 0);
-        head._isCustom = true;
+        head._partial = isPartial ? `${matchedLines}/${totalLines}` : null;
       } else {
-        // 整张发票都匹配、且未逐行设置 → 用发票 Balance（保持原行为）
-        head._toPayCalc = head.to_pay_amount != null ? Number(head.to_pay_amount) : bal;
-        head._isCustom = false;
+        // 发票级：对账号挂在抬头行、未做逐 VIN 拆分 → 用整张发票的本次应付（默认 = Balance）
+        head._toPayCalc = headRow.to_pay_amount != null ? Number(headRow.to_pay_amount) : bal;
+        head._isCustom = headCustom;
+        head._partial = null;   // 整张发票付，不显示 n/m 角标
       }
       return head;
     }).sort((a, b) => (a.invoice_no || '').localeCompare(b.invoice_no || ''));
