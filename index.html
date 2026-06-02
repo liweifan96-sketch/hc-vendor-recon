@@ -2418,19 +2418,38 @@ function genReport() {
     }
     return Object.values(byInv).map(g => {
       g.sort((a, b) => (a.line_no || 1) - (b.line_no || 1));
-      // 每张发票，统计该对账号匹配的 VIN 行数和金额（× 1.1 含 GST）
+      // 每张发票，统计该对账号匹配的 VIN 行数
       const matchedLines = g.length;
       const totalLines = (S.stmtInvoices.filter(r => r.invoice_no === g[0].invoice_no && r.statement_month === g[0].statement_month && r.store === g[0].store) || []).length;
       const isPartial = matchedLines < totalLines;
       const head = g[0];
-      // 若是部分匹配（同发票不同 VIN 不同对账号），按 VIN 行金额 × 1.1 计
-      if (isPartial) {
-        const vinAmt = g.reduce((s, x) => s + (Number(x.amount_aud) || 0), 0) * 1.1;
-        head._toPayCalc = vinAmt;
-        head._partial = `${matchedLines}/${totalLines}`;
+      head._partial = isPartial ? `${matchedLines}/${totalLines}` : null;
+
+      const bal = Number(head.balance_aud || 0);
+      // 判断用户是否已"逐行设置"本次应付：抬头行被改成≠Balance，或任一非抬头 VIN 行单独设了本次应付
+      const headCustom = head.to_pay_amount != null && Math.abs(Number(head.to_pay_amount) - bal) > 0.01;
+      const othersHaveToPay = g.slice(1).some(x => x.to_pay_amount != null);
+      const perRow = headCustom || othersHaveToPay;
+
+      // 单行本次应付：抬头行的"默认值"= 整张发票 Balance（不能当作单个 VIN），逐行模式下回退到该行含GST金额
+      const lineToPay = (x, isHead) => {
+        if (x.to_pay_amount != null && !(isHead && Math.abs(Number(x.to_pay_amount) - bal) < 0.01))
+          return Number(x.to_pay_amount);
+        return (Number(x.amount_aud) || 0) * 1.1;   // 未单独设置 → 该行含GST金额
+      };
+
+      if (perRow) {
+        // 用户已逐行设置 → 合计该对账号匹配到的每个 VIN 行的本次应付
+        head._toPayCalc = g.reduce((s, x, idx) => s + lineToPay(x, idx === 0), 0);
+        head._isCustom = true;
+      } else if (isPartial) {
+        // 未逐行设置，但只匹配了部分 VIN → 按匹配行含GST金额合计
+        head._toPayCalc = g.reduce((s, x) => s + (Number(x.amount_aud) || 0) * 1.1, 0);
+        head._isCustom = true;
       } else {
-        head._toPayCalc = head.to_pay_amount != null ? Number(head.to_pay_amount) : Number(head.balance_aud || 0);
-        head._partial = null;
+        // 整张发票都匹配、且未逐行设置 → 用发票 Balance（保持原行为）
+        head._toPayCalc = head.to_pay_amount != null ? Number(head.to_pay_amount) : bal;
+        head._isCustom = false;
       }
       return head;
     }).sort((a, b) => (a.invoice_no || '').localeCompare(b.invoice_no || ''));
@@ -2456,16 +2475,12 @@ function genReport() {
   const directPay = sumToPay(directInvoices);   // ④ 本月应支付（直接支付对账号）
   const loanPay = sumToPay(loanInvoices);       // ③ 扣减本月门店贷款（贷款对账号）
 
-  // ① 月度 Statement 账单合计 = 当月全部发票的 Balance 合计（按发票级去重）
-  const monthInvSet = {};
-  for (const r of S.stmtInvoices) {
-    if (r.statement_month === S.month && !r.ignored) {
-      if (!monthInvSet[r.invoice_no] || (r.line_no || 1) < (monthInvSet[r.invoice_no].line_no || 1)) {
-        monthInvSet[r.invoice_no] = r;
-      }
-    }
-  }
-  const stmtMonthTotal = Object.values(monthInvSet).reduce((s, i) => s + Number(i.balance_aud || 0), 0);
+  // ① 月度 Statement 账单合计 = 当月全部发票 Balance AUD 合计
+  // 始终用 Balance（与本次应付无关，改本次应付不影响此值，等于 PDF 的 BALANCE DUE AUD）
+  // Balance 只存在每张发票的抬头行；其余 VIN 行 balance 为空(=0)，直接累加即各发票 Balance 之和
+  const stmtMonthTotal = S.stmtInvoices
+    .filter(r => r.statement_month === S.month && !r.ignored)
+    .reduce((s, r) => s + Number(r.balance_aud || 0), 0);
 
   // ⑤ 剩余未申请支付 = ① - ③ - ④ - ②
   const remaining = r2(stmtMonthTotal - loanPay - directPay - midAmount);
@@ -2496,10 +2511,10 @@ function genReport() {
             <th class="num">Invoice Amount</th><th class="num">本次应付</th>
           </tr></thead>
           <tbody>${list.map(i => {
-            const tp = i.to_pay_amount != null ? Number(i.to_pay_amount) : Number(i.balance_aud || 0);
-            const custom = i.to_pay_amount != null && Math.abs(Number(i.to_pay_amount) - Number(i.balance_aud || 0)) > 0.01;
+            const tp = i._toPayCalc != null ? Number(i._toPayCalc) : (i.to_pay_amount != null ? Number(i.to_pay_amount) : Number(i.balance_aud || 0));
+            const custom = !!i._isCustom;
             return `<tr>
-              <td class="mono" style="font-size:12px;color:var(--accent);font-weight:600">${esc(i.invoice_no)}</td>
+              <td class="mono" style="font-size:12px;color:var(--accent);font-weight:600">${esc(i.invoice_no)}${i._partial ? ` <span class="badge b-mu" style="font-size:10px">${i._partial}</span>` : ''}</td>
               <td class="mono" style="font-size:12px">${fmtDate(esc(i.invoice_date)) || '—'}</td>
               <td class="mono" style="font-size:12px">${fmtDate(esc(i.due_date)) || '—'}</td>
               <td class="mono" style="font-size:11px">${esc(i.po_short || i.reference) || '—'}</td>
@@ -2566,7 +2581,7 @@ function expReport() {
   const r = S.currentReport;
   if (!r) { toast('请先生成报告', 'wn'); return; }
   const wb = XLSX.utils.book_new();
-  const toPayOf = (i) => i.to_pay_amount != null ? i.to_pay_amount : i.balance_aud;
+  const toPayOf = (i) => i._toPayCalc != null ? i._toPayCalc : (i.to_pay_amount != null ? i.to_pay_amount : i.balance_aud);
 
   // Sheet 1: 汇总
   const summary = [
