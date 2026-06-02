@@ -1564,25 +1564,38 @@ async function doImport() {
       }
     }
 
-    // 步骤 3：合并：手填字段保护
+    // 步骤 3：合并 + 字段归一化
+    // ⚠ PostgREST 批量 upsert 要求同一批每条记录的"键集合"完全一致，否则整批 400 失败。
+    // 之前 recon_no/付款方式/合同类别等是"有才加"，导致各记录键不一致 → 批量失败（失败 100 的根因）。
+    // 这里把每条记录都规整成同一组字段；只写 Statement 级列，绝不带 vin/amount_aud 等 VIN 级列，
+    // 以免 merge-duplicates 把抬头行已识别的 VIN 数据覆盖成空。
     showL('合并数据...');
     records = records.map(r => {
-      const exist = existMap[r.invoice_no];
-      if (!exist) return r;   // 新发票，原样写入
-      // 已存在 → 保护手填字段
-      const merged = { ...r };
-      if (exist.to_pay_amount  != null) merged.to_pay_amount  = exist.to_pay_amount;
-      else                              merged.to_pay_amount  = r.balance_aud;  // 新刷新的发票，本次应付默认 = 新 balance
-      if (exist.recon_no)               merged.recon_no       = exist.recon_no;
-      if (exist.payment_method)         merged.payment_method = exist.payment_method;
-      if (exist.contract_type)          merged.contract_type  = exist.contract_type;
-      if (exist.payment_date)           merged.payment_date   = exist.payment_date;
-      if (exist.ignored)                merged.ignored        = exist.ignored;
-      return merged;
+      const exist = existMap[r.invoice_no];   // 抬头行(line_no=1)的手填字段
+      return {
+        store:           r.store,
+        statement_month: r.statement_month,
+        invoice_no:      r.invoice_no,
+        line_no:         r.line_no,
+        invoice_date:    r.invoice_date ?? null,
+        due_date:        r.due_date ?? null,
+        reference:       r.reference ?? null,
+        invoice_amount:  r.invoice_amount ?? null,
+        payments:        r.payments ?? null,
+        balance_aud:     r.balance_aud ?? null,
+        month_category:  r.month_category ?? null,
+        // 手填字段：已有则保留，否则用新解析/默认（统一给 null/默认，保证键一致）
+        to_pay_amount:  (exist && exist.to_pay_amount != null) ? exist.to_pay_amount : (r.balance_aud ?? null),
+        recon_no:       (exist && exist.recon_no)       ? exist.recon_no       : null,
+        payment_method: (exist && exist.payment_method) ? exist.payment_method : null,
+        contract_type:  (exist && exist.contract_type)  ? exist.contract_type  : null,
+        payment_date:   (exist && exist.payment_date)   ? exist.payment_date   : null,
+        ignored:        (exist && exist.ignored)        ? exist.ignored        : false,
+      };
     });
 
     // 步骤 4：批量 upsert
-    let saved = 0, failed = 0;
+    let saved = 0, failed = 0, firstErr = '';
     const BATCH = 50;
     for (let i = 0; i < records.length; i += BATCH) {
       const batch = records.slice(i, i + BATCH);
@@ -1592,12 +1605,13 @@ async function doImport() {
         saved += batch.length;
       } catch (e) {
         failed += batch.length;
+        if (!firstErr) firstErr = e.message || String(e);
         console.error('Stmt batch failed', e);
       }
     }
     hideL();
-    const detail = `保存 ${saved} 张 · 新增 ${newCount} · 更新 ${matchedCount} · 保留手填 ${manualKeptCount}` + (failed ? ` · 失败 ${failed}` : '');
-    toast('Statement 导入完成', failed ? 'wn' : 'ok', detail, 6000);
+    const detail = `保存 ${saved} 张 · 新增 ${newCount} · 更新 ${matchedCount} · 保留手填 ${manualKeptCount}` + (failed ? ` · 失败 ${failed}（${firstErr}）` : '');
+    toast('Statement 导入完成', failed ? 'wn' : 'ok', detail, failed ? 12000 : 6000);
     await loadData();
   } catch (e) {
     hideL();
